@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.74.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Verilog实现32位乘法器 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+  
+  <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css" rel="stylesheet">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+    
+  
+  <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Verilog实现32位乘法器</h1>
+  <time datetime=2020-07-16T14:05:38&#43;0800 class="post-date">Thu, Jul 16, 2020</time>
+  <p>  实现乘法器有多种思路，本次作业了解了Wallace Tree算法和移位相加的方式。最终采取移位相加的方式实现。下面是对两种方式的介绍。</p>
+<h2 id="wallace-tree算法">Wallace Tree算法</h2>
+<p>  Wallace Tree 主要思想是：将三行变成2行，实际相当于3位到2位的压缩器，简称3-2压缩器。通过合理的分配处理乘法中出现的大量部分积。因为有很多运算是可以并行计算的，所以能够极大提高运算速度。</p>
+<p>  具体讲解参照以下两篇博客（8位乘法）：</p>
+<p>  <a href="https://www.cnblogs.com/wangkai2019/p/11153887.html">乘法器——Wallace树型乘法器</a></p>
+<p>  <a href="https://blog.csdn.net/shishu8385/article/details/103996821">Wallace Tree 图解</a></p>
+<h3 id="全加器">全加器</h3>
+<p>  全加器是Wallace Tree算法中需要用到的一个部件。</p>
+<p><img src="../../img/verilog_multu/%E5%85%A8%E5%8A%A0%E5%99%A8.jpg" alt="全加器"></p>
+<table>
+<thead>
+<tr>
+<th>Ci-1</th>
+<th>A</th>
+<th>B</th>
+<th>S</th>
+<th>Ci</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p><em><strong>Verilog</strong></em> 实现：</p>
+<pre><code>module FA(A, B, Cin, Sum, Count);
+    input A;
+    input B;
+    input Cin;
+    output Sum;
+
+    output Count;
+    wire S1, T1, T2, T3;
+    // -- statements -- //
+    xor x1 (S1, A, B);
+    xor x2 (Sum, S1, Cin);
+    and A1 (T3, A, B );
+    and A2 (T2, B, Cin);
+    and A3 (T1, A, Cin);
+    or O1 (Count, T1, T2, T3 );
+endmodule
+</code></pre><h3 id="verilog实现">Verilog实现</h3>
+<p>  因为是32位乘法，分为16级全加器。由于实现代码的冗长，32位×32位会导致每一级需要有1~6个全加器，而每一级也有32个分支，需要手写的部分非常多。故没有采取这种方式来实现。</p>
+<h2 id="移位相加算法">移位相加算法</h2>
+<p>  两个二进制数 a 和 b 相乘，可以认为是 a 和 b 的每一位相乘后移位后的结果相加。</p>
+<p>  关于 a 与 b 的每一位相乘产生的中间结果，如果 b 那位是 0，那么中间结果就是 0；如果是 1，那么中间结果就是在 a 前后补上相应位数的零通过字符拼接的方式表示。然后将这些中间乘积相加就是最后的结果。</p>
+<p>  无符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
+<pre><code>`timescale 1ns / 1ps
+
+module MULTU(
+    input           clk,    // 乘法器时钟信号
+    input           reset,
+    input   [31:0]  a,      // 输入 a(被乘数)
+    input   [31:0]  b,      // 输入 b(乘数)
+    output  [63:0]  z       // 乘积输出 z
+);
+
+    wire [63:0] temp;
+    
+    // 申请寄存器
+    reg [63:0] stored0;
+    reg [63:0] stored1;
+    reg [63:0] stored2;
+    reg [63:0] stored3;
+    reg [63:0] stored4;
+    reg [63:0] stored5;
+    reg [63:0] stored6;
+    reg [63:0] stored7;
+    reg [63:0] stored8;
+    reg [63:0] stored9;
+    reg [63:0] stored10;
+    reg [63:0] stored11;
+    reg [63:0] stored12;
+    reg [63:0] stored13;
+    reg [63:0] stored14;
+    reg [63:0] stored15;
+    reg [63:0] stored16;
+    reg [63:0] stored17;
+    reg [63:0] stored18;
+    reg [63:0] stored19;
+    reg [63:0] stored20;
+    reg [63:0] stored21;
+    reg [63:0] stored22;
+    reg [63:0] stored23;
+    reg [63:0] stored24;
+    reg [63:0] stored25;
+    reg [63:0] stored26;
+    reg [63:0] stored27;
+    reg [63:0] stored28;
+    reg [63:0] stored29;
+    reg [63:0] stored30;
+    reg [63:0] stored31;
+    
+    wire [63:0] add0_1;
+    wire [63:0] add2_3;
+    wire [63:0] add4_5;
+    wire [63:0] add6_7;
+    wire [63:0] add8_9;
+    wire [63:0] add10_11;
+    wire [63:0] add12_13;
+    wire [63:0] add14_15;
+    wire [63:0] add16_17;
+    wire [63:0] add18_19;
+    wire [63:0] add20_21;
+    wire [63:0] add22_23;
+    wire [63:0] add24_25;
+    wire [63:0] add26_27;
+    wire [63:0] add28_29;
+    wire [63:0] add30_31;
+    
+    wire [63:0] add0t1_2t3;
+    wire [63:0] add4t5_6t7;
+    wire [63:0] add8t9_10t11;
+    wire [63:0] add12t13_14t15;
+    wire [63:0] add16t17_18t19;
+    wire [63:0] add20t21_22t23;
+    wire [63:0] add24t25_26t27;
+    wire [63:0] add28t29_30t31;
+    
+    wire [63:0] add0t3_4t7;
+    wire [63:0] add8t11_12t15;
+    wire [63:0] add16t19_20t23;
+    wire [63:0] add24t27_28t31;
+    
+    wire [63:0] add0t7_8t15;
+    wire [63:0] add16t23_24t31;
+    
+    assign z = temp;
+    assign add0_1 = stored0 + stored1;
+    assign add2_3 = stored2 + stored3;
+    assign add4_5 = stored4 + stored5;
+    assign add6_7 = stored6 + stored7;
+    assign add8_9 = stored8 + stored9;
+    assign add10_11 = stored10 + stored11;
+    assign add12_13 = stored12 + stored13;
+    assign add14_15 = stored14 + stored15;
+    assign add16_17 = stored16 + stored17;
+    assign add18_19 = stored18 + stored19;
+    assign add20_21 = stored20 + stored21;
+    assign add22_23 = stored22 + stored23;
+    assign add24_25 = stored24 + stored25;
+    assign add26_27 = stored26 + stored27;
+    assign add28_29 = stored28 + stored29;
+    assign add30_31 = stored30 + stored31;
+    
+    assign add0t1_2t3 = add0_1 + add2_3;
+    assign add4t5_6t7 = add4_5 + add6_7;
+    assign add8t9_10t11 = add8_9 + add10_11;
+    assign add12t13_14t15 = add12_13 + add14_15;
+    assign add16t17_18t19 = add16_17 + add18_19;
+    assign add20t21_22t23 = add20_21 + add22_23;
+    assign add24t25_26t27 = add24_25 + add26_27;
+    assign add28t29_30t31 = add28_29 + add30_31;
+    
+    assign add0t3_4t7 = add0t1_2t3 + add4t5_6t7;
+    assign add8t11_12t15 = add8t9_10t11 + add12t13_14t15;
+    assign add16t19_20t23 = add16t17_18t19 + add20t21_22t23;
+    assign add24t27_28t31 = add24t25_26t27 + add28t29_30t31;
+    
+    assign add0t7_8t15 = add0t3_4t7 + add8t11_12t15;
+    assign add16t23_24t31 = add16t19_20t23 + add24t27_28t31;
+    
+    assign temp = add0t7_8t15 + add16t23_24t31;
+
+    always @(posedge clk or negedge reset)
+    begin
+        // reset 置零
+        if(reset == 0) 
+        begin
+            stored0 &lt;= 0;
+            stored1 &lt;= 0;
+            stored2 &lt;= 0;
+            stored3 &lt;= 0;
+            stored4 &lt;= 0;
+            stored5 &lt;= 0;
+            stored6 &lt;= 0;
+            stored7 &lt;= 0;
+            stored8 &lt;= 0;
+            stored9 &lt;= 0;
+            stored10 &lt;= 0;
+            stored11 &lt;= 0;
+            stored12 &lt;= 0;
+            stored13 &lt;= 0;
+            stored14 &lt;= 0;
+            stored15 &lt;= 0;
+            stored16 &lt;= 0;
+            stored17 &lt;= 0;
+            stored18 &lt;= 0;
+            stored19 &lt;= 0;
+            stored20 &lt;= 0;
+            stored21 &lt;= 0;
+            stored22 &lt;= 0;
+            stored23 &lt;= 0;
+            stored24 &lt;= 0;
+            stored25 &lt;= 0;
+            stored26 &lt;= 0;
+            stored27 &lt;= 0;
+            stored28 &lt;= 0;
+            stored29 &lt;= 0;
+            stored30 &lt;= 0;
+            stored31 &lt;= 0;
+        end
+        else 
+        begin
+        //通过字符拼接方式表示出中间相乘值，并相加
+        stored0 &lt;= b[0]? {32'b0, a} :64'b0;
+        stored1 &lt;= b[1]? {31'b0, a, 1'b0} :64'b0;
+        stored2 &lt;= b[2]? {30'b0, a, 2'b0} :64'b0;
+        stored3 &lt;= b[3]? {29'b0, a, 3'b0} :64'b0;
+        stored4 &lt;= b[4]? {28'b0, a, 4'b0} :64'b0;
+        stored5 &lt;= b[5]? {27'b0, a, 5'b0} :64'b0;
+        stored6 &lt;= b[6]? {26'b0, a, 6'b0} :64'b0;
+        stored7 &lt;= b[7]? {25'b0, a, 7'b0} :64'b0;
+        stored8 &lt;= b[8]? {24'b0, a, 8'b0} :64'b0;
+        stored9 &lt;= b[9]? {23'b0, a, 9'b0} :64'b0;
+        stored10 &lt;= b[10]? {22'b0, a, 10'b0} :64'b0;
+        stored11 &lt;= b[11]? {21'b0, a, 11'b0} :64'b0;
+        stored12 &lt;= b[12]? {20'b0, a, 12'b0} :64'b0;
+        stored13 &lt;= b[13]? {19'b0, a, 13'b0} :64'b0;
+        stored14 &lt;= b[14]? {18'b0, a, 14'b0} :64'b0;
+        stored15 &lt;= b[15]? {17'b0, a, 15'b0} :64'b0;
+        stored16 &lt;= b[16]? {16'b0, a, 16'b0} :64'b0;
+        stored17 &lt;= b[17]? {15'b0, a, 17'b0} :64'b0;
+        stored18 &lt;= b[18]? {14'b0, a, 18'b0} :64'b0;
+        stored19 &lt;= b[19]? {13'b0, a, 19'b0} :64'b0;
+        stored20 &lt;= b[20]? {12'b0, a, 20'b0} :64'b0;
+        stored21 &lt;= b[21]? {11'b0, a, 21'b0} :64'b0;
+        stored22 &lt;= b[22]? {10'b0, a, 22'b0} :64'b0;
+        stored23 &lt;= b[23]? {9'b0, a, 23'b0} :64'b0;
+        stored24 &lt;= b[24]? {8'b0, a, 24'b0} :64'b0;
+        stored25 &lt;= b[25]? {7'b0, a, 25'b0} :64'b0;
+        stored26 &lt;= b[26]? {6'b0, a, 26'b0} :64'b0;
+        stored27 &lt;= b[27]? {5'b0, a, 27'b0} :64'b0;
+        stored28 &lt;= b[28]? {4'b0, a, 28'b0} :64'b0;
+        stored29 &lt;= b[29]? {3'b0, a, 29'b0} :64'b0;
+        stored30 &lt;= b[30]? {2'b0, a, 30'b0} :64'b0;
+        stored31 &lt;= b[31]? {1'b0, a, 31'b0} :64'b0;
+        end
+    end
+endmodule
+</code></pre><p>  有符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
+<pre><code>`timescale 1ns / 1ps
+
+module MULT(
+    input           clk,    // 乘法器时钟信号
+    input           reset,
+    input   [31:0]  a,      // 输入 a(被乘数)
+    input   [31:0]  b,      // 输入 b(乘数)
+    output  [63:0]  z       // 乘积输出 z
+);
+
+    wire [63:0] temp;
+    wire [63:0] res;
+    wire [31:0] temp_a;
+    wire [31:0] temp_b;
+    wire sign;
+    
+    // 申请寄存器
+    reg [63:0] stored0;
+    reg [63:0] stored1;
+    reg [63:0] stored2;
+    reg [63:0] stored3;
+    reg [63:0] stored4;
+    reg [63:0] stored5;
+    reg [63:0] stored6;
+    reg [63:0] stored7;
+    reg [63:0] stored8;
+    reg [63:0] stored9;
+    reg [63:0] stored10;
+    reg [63:0] stored11;
+    reg [63:0] stored12;
+    reg [63:0] stored13;
+    reg [63:0] stored14;
+    reg [63:0] stored15;
+    reg [63:0] stored16;
+    reg [63:0] stored17;
+    reg [63:0] stored18;
+    reg [63:0] stored19;
+    reg [63:0] stored20;
+    reg [63:0] stored21;
+    reg [63:0] stored22;
+    reg [63:0] stored23;
+    reg [63:0] stored24;
+    reg [63:0] stored25;
+    reg [63:0] stored26;
+    reg [63:0] stored27;
+    reg [63:0] stored28;
+    reg [63:0] stored29;
+    reg [63:0] stored30;
+    reg [63:0] stored31;
+    
+    wire [63:0] add0_1;
+    wire [63:0] add2_3;
+    wire [63:0] add4_5;
+    wire [63:0] add6_7;
+    wire [63:0] add8_9;
+    wire [63:0] add10_11;
+    wire [63:0] add12_13;
+    wire [63:0] add14_15;
+    wire [63:0] add16_17;
+    wire [63:0] add18_19;
+    wire [63:0] add20_21;
+    wire [63:0] add22_23;
+    wire [63:0] add24_25;
+    wire [63:0] add26_27;
+    wire [63:0] add28_29;
+    wire [63:0] add30_31;
+    
+    wire [63:0] add0t1_2t3;
+    wire [63:0] add4t5_6t7;
+    wire [63:0] add8t9_10t11;
+    wire [63:0] add12t13_14t15;
+    wire [63:0] add16t17_18t19;
+    wire [63:0] add20t21_22t23;
+    wire [63:0] add24t25_26t27;
+    wire [63:0] add28t29_30t31;
+    
+    wire [63:0] add0t3_4t7;
+    wire [63:0] add8t11_12t15;
+    wire [63:0] add16t19_20t23;
+    wire [63:0] add24t27_28t31;
+    
+    wire [63:0] add0t7_8t15;
+    wire [63:0] add16t23_24t31;
+    
+    assign temp_a = a[31]? {~a[31:0] + 1'b1}:a;
+    assign temp_b = b[31]? {~b[31:0] + 1'b1}:b;
+    assign sign = a[31]^b[31];  //异或
+    assign add0_1 = stored0 + stored1;
+    assign add2_3 = stored2 + stored3;
+    assign add4_5 = stored4 + stored5;
+    assign add6_7 = stored6 + stored7;
+    assign add8_9 = stored8 + stored9;
+    assign add10_11 = stored10 + stored11;
+    assign add12_13 = stored12 + stored13;
+    assign add14_15 = stored14 + stored15;
+    assign add16_17 = stored16 + stored17;
+    assign add18_19 = stored18 + stored19;
+    assign add20_21 = stored20 + stored21;
+    assign add22_23 = stored22 + stored23;
+    assign add24_25 = stored24 + stored25;
+    assign add26_27 = stored26 + stored27;
+    assign add28_29 = stored28 + stored29;
+    assign add30_31 = stored30 + stored31;
+    
+    assign add0t1_2t3 = add0_1 + add2_3;
+    assign add4t5_6t7 = add4_5 + add6_7;
+    assign add8t9_10t11 = add8_9 + add10_11;
+    assign add12t13_14t15 = add12_13 + add14_15;
+    assign add16t17_18t19 = add16_17 + add18_19;
+    assign add20t21_22t23 = add20_21 + add22_23;
+    assign add24t25_26t27 = add24_25 + add26_27;
+    assign add28t29_30t31 = add28_29 + add30_31;
+    
+    assign add0t3_4t7 = add0t1_2t3 + add4t5_6t7;
+    assign add8t11_12t15 = add8t9_10t11 + add12t13_14t15;
+    assign add16t19_20t23 = add16t17_18t19 + add20t21_22t23;
+    assign add24t27_28t31 = add24t25_26t27 + add28t29_30t31;
+    
+    assign add0t7_8t15 = add0t3_4t7 + add8t11_12t15;
+    assign add16t23_24t31 = add16t19_20t23 + add24t27_28t31;
+    
+    assign temp = add0t7_8t15 + add16t23_24t31;
+    assign res = sign? {~temp[63:0] + 1'b1}:temp;
+    assign z = res;
+    
+    
+    always @(posedge clk or negedge reset)
+    begin
+        // reset 置零
+        if(reset == 0) 
+        begin
+            stored0 &lt;= 0;
+            stored1 &lt;= 0;
+            stored2 &lt;= 0;
+            stored3 &lt;= 0;
+            stored4 &lt;= 0;
+            stored5 &lt;= 0;
+            stored6 &lt;= 0;
+            stored7 &lt;= 0;
+            stored8 &lt;= 0;
+            stored9 &lt;= 0;
+            stored10 &lt;= 0;
+            stored11 &lt;= 0;
+            stored12 &lt;= 0;
+            stored13 &lt;= 0;
+            stored14 &lt;= 0;
+            stored15 &lt;= 0;
+            stored16 &lt;= 0;
+            stored17 &lt;= 0;
+            stored18 &lt;= 0;
+            stored19 &lt;= 0;
+            stored20 &lt;= 0;
+            stored21 &lt;= 0;
+            stored22 &lt;= 0;
+            stored23 &lt;= 0;
+            stored24 &lt;= 0;
+            stored25 &lt;= 0;
+            stored26 &lt;= 0;
+            stored27 &lt;= 0;
+            stored28 &lt;= 0;
+            stored29 &lt;= 0;
+            stored30 &lt;= 0;
+            stored31 &lt;= 0;
+        end
+        else 
+        begin
+        //通过字符拼接方式表示出中间相乘值，并相加
+        assign stored0 = temp_b[0]? {32'b0, temp_a} :64'b0;
+        assign stored1 = temp_b[1]? {31'b0, temp_a, 1'b0} :64'b0;
+        assign stored2 = temp_b[2]? {30'b0, temp_a, 2'b0} :64'b0;
+        assign stored3 = temp_b[3]? {29'b0, temp_a, 3'b0} :64'b0;
+        assign stored4 = temp_b[4]? {28'b0, temp_a, 4'b0} :64'b0;
+        assign stored5 = temp_b[5]? {27'b0, temp_a, 5'b0} :64'b0;
+        assign stored6 = temp_b[6]? {26'b0, temp_a, 6'b0} :64'b0;
+        assign stored7 = temp_b[7]? {25'b0, temp_a, 7'b0} :64'b0;
+        assign stored8 = temp_b[8]? {24'b0, temp_a, 8'b0} :64'b0;
+        assign stored9 = temp_b[9]? {23'b0, temp_a, 9'b0} :64'b0;
+        assign stored10 = temp_b[10]? {22'b0, temp_a, 10'b0} :64'b0;
+        assign stored11 = temp_b[11]? {21'b0, temp_a, 11'b0} :64'b0;
+        assign stored12 = temp_b[12]? {20'b0, temp_a, 12'b0} :64'b0;
+        assign stored13 = temp_b[13]? {19'b0, temp_a, 13'b0} :64'b0;
+        assign stored14 = temp_b[14]? {18'b0, temp_a, 14'b0} :64'b0;
+        assign stored15 = temp_b[15]? {17'b0, temp_a, 15'b0} :64'b0;
+        assign stored16 = temp_b[16]? {16'b0, temp_a, 16'b0} :64'b0;
+        assign stored17 = temp_b[17]? {15'b0, temp_a, 17'b0} :64'b0;
+        assign stored18 = temp_b[18]? {14'b0, temp_a, 18'b0} :64'b0;
+        assign stored19 = temp_b[19]? {13'b0, temp_a, 19'b0} :64'b0;
+        assign stored20 = temp_b[20]? {12'b0, temp_a, 20'b0} :64'b0;
+        assign stored21 = temp_b[21]? {11'b0, temp_a, 21'b0} :64'b0;
+        assign stored22 = temp_b[22]? {10'b0, temp_a, 22'b0} :64'b0;
+        assign stored23 = temp_b[23]? {9'b0, temp_a, 23'b0} :64'b0;
+        assign stored24 = temp_b[24]? {8'b0, temp_a, 24'b0} :64'b0;
+        assign stored25 = temp_b[25]? {7'b0, temp_a, 25'b0} :64'b0;
+        assign stored26 = temp_b[26]? {6'b0, temp_a, 26'b0} :64'b0;
+        assign stored27 = temp_b[27]? {5'b0, temp_a, 27'b0} :64'b0;
+        assign stored28 = temp_b[28]? {4'b0, temp_a, 28'b0} :64'b0;
+        assign stored29 = temp_b[29]? {3'b0, temp_a, 29'b0} :64'b0;
+        assign stored30 = temp_b[30]? {2'b0, temp_a, 30'b0} :64'b0;
+        assign stored31 = temp_b[31]? {1'b0, temp_a, 31'b0} :64'b0; 
+        end
+    end
+endmodule
+</code></pre>
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>
