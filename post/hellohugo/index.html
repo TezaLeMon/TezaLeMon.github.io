@@ -12,10 +12,10 @@
   <meta name="description" content="" />
 
   
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+  <link type="text/css" rel="stylesheet" href="http://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="http://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="http://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="http://TezaLeMon.github.io/css/hyde.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
 
   
@@ -36,7 +36,7 @@
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
-      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <a href="http://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
       <p class="lead">
        无名小站，始于2020-7-14，记录某大学仔学习历程。 
       </p>
@@ -44,7 +44,7 @@
 
     <nav>
       <ul class="sidebar-nav">
-        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        <li><a href="http://TezaLeMon.github.io/">Home</a> </li>
         
       </ul>
     </nav>
@@ -57,7 +57,37 @@
     <div class="post">
   <h1>Hello Hugo!</h1>
   <time datetime=2020-07-14T15:21:40&#43;0800 class="post-date">Tue, Jul 14, 2020</time>
-  <p>Hello Hugo!</p>
+  <p>  Hello Hugo!</p>
+<p>  记录用<strong>Hugo</strong>生成站点一直到发表第一个帖子的过程。</p>
+<hr>
+<h3 id="生成站点">生成站点</h3>
+<p>  根据官方文档，生成站点的命令：</p>
+<pre><code>$ hugo new site /path/to/site
+</code></pre><hr>
+<h3 id="创建文章">创建文章</h3>
+<p>  创建我的第一篇文章。</p>
+<pre><code>$ hugo new post/hellohugo.md
+</code></pre><p>  之后就可以在**.md**文件中写下要发表的内容啦。</p>
+<hr>
+<h3 id="运行hugo">运行Hugo</h3>
+<p>  在站点根目录下执行：</p>
+<pre><code>$ hugo server --theme=xxxx --buildDrafts
+</code></pre><p>  PS：<strong>xxxx</strong>为主题名，可以自行挑选喜欢的，也可以在根目录的<em>config.toml</em>中直接指定默认的主题，这样在指令中就不用指定了。</p>
+<p>  此时访问<em>http://localhost:1313</em>就可以看到本地部署好的<strong>hugo server</strong>的效果了。</p>
+<hr>
+<h3 id="部署到github-pages">部署到GitHub Pages</h3>
+<p>  首先在GitHub上创建一个Repository，命名为：<em>xxxx.github.io</em> （<strong>xxxx</strong>为自己的github用户名）。</p>
+<p>  在站点根目录执行命令生成最终页面：</p>
+<pre><code>$ hugo --baseUrl=&quot;http://xxxx.github.io/&quot;
+</code></pre><p>  PS：这个命令并不会生成草稿页面，需要去掉文章头部的<em>draft=true</em>再重新生成，或者加上*&ndash;buildDrafts*将草稿页面也生成。</p>
+<p>  此时查看根目录下<strong>public</strong>文件夹就能看到生成的文件。将其<strong>push</strong>到<strong>repository</strong>中就完成了。</p>
+<pre><code>$ cd public
+$ git init
+$ git remote add origin https://github.com/TezaLeMon/TezaLeMon.github.io.git
+$ git add .
+$ git commit -m &quot;first commit&quot;
+$ git push -u origin master
+</code></pre><p>  至此，我的第一篇文已发出！~ 😏</p>
 
 </div>
 
