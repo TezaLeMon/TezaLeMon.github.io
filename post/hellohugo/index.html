@@ -78,7 +78,7 @@
 <h3 id="部署到github-pages">部署到GitHub Pages</h3>
 <p>  首先在GitHub上创建一个Repository，命名为：<em>xxxx.github.io</em> （<strong>xxxx</strong>为自己的github用户名）。</p>
 <p>  在站点根目录执行命令生成最终页面：</p>
-<pre><code>$ hugo --baseUrl=&quot;http://xxxx.github.io/&quot;
+<pre><code>$ hugo --theme=hyde --baseUrl=&quot;http://xxxx.github.io/&quot;
 </code></pre><p>  PS：这个命令并不会生成草稿页面，需要去掉文章头部的<em>draft=true</em>再重新生成，或者加上*&ndash;buildDrafts*将草稿页面也生成。</p>
 <p>  此时查看根目录下<strong>public</strong>文件夹就能看到生成的文件。将其<strong>push</strong>到<strong>repository</strong>中就完成了。</p>
 <pre><code>$ cd public
