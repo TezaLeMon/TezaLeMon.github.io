@@ -58,7 +58,7 @@
   <h1>Hello Hugo!</h1>
   <time datetime=2020-07-14T15:21:40&#43;0800 class="post-date">Tue, Jul 14, 2020</time>
   <p>  Hello Hugo!</p>
-<p>  记录用<strong>Hugo</strong>生成站点一直到发表第一个帖子的过程。</p>
+<p>  记录用 <strong>Hugo</strong> 生成站点一直到发表第一个帖子的过程。</p>
 <hr>
 <h3 id="生成站点">生成站点</h3>
 <p>  根据官方文档，生成站点的命令：</p>
@@ -67,20 +67,20 @@
 <h3 id="创建文章">创建文章</h3>
 <p>  创建我的第一篇文章。</p>
 <pre><code>$ hugo new post/hellohugo.md
-</code></pre><p>  之后就可以在**.md**文件中写下要发表的内容啦。</p>
+</code></pre><p>  之后就可以在 <strong>.md</strong> 文件中写下要发表的内容啦。</p>
 <hr>
 <h3 id="运行hugo">运行Hugo</h3>
 <p>  在站点根目录下执行：</p>
 <pre><code>$ hugo server --theme=xxxx --buildDrafts
-</code></pre><p>  PS：<strong>xxxx</strong>为主题名，可以自行挑选喜欢的，也可以在根目录的<em>config.toml</em>中直接指定默认的主题，这样在指令中就不用指定了。</p>
-<p>  此时访问<em>http://localhost:1313</em>就可以看到本地部署好的<strong>hugo server</strong>的效果了。</p>
+</code></pre><p>  PS：<strong>xxxx</strong> 为主题名，可以自行挑选喜欢的，也可以在根目录的<em>config.toml</em>中直接指定默认的主题，这样在指令中就不用指定了。</p>
+<p>  此时访问 <em>http://localhost:1313</em> 就可以看到本地部署好的 <strong>hugo server</strong> 的效果了。</p>
 <hr>
 <h3 id="部署到github-pages">部署到GitHub Pages</h3>
-<p>  首先在GitHub上创建一个Repository，命名为：<em>xxxx.github.io</em> （<strong>xxxx</strong>为自己的github用户名）。</p>
+<p>  首先在GitHub上创建一个Repository，命名为：<em>xxxx.github.io</em> （<strong>xxxx</strong> 为自己的github用户名）。</p>
 <p>  在站点根目录执行命令生成最终页面：</p>
 <pre><code>$ hugo --theme=hyde --baseUrl=&quot;https://TezaLeMon.github.io/&quot;
 </code></pre><p>  PS：这个命令并不会生成草稿页面，需要去掉文章头部的<em>draft=true</em>再重新生成，或者加上*&ndash;buildDrafts*将草稿页面也生成。</p>
-<p>  此时查看根目录下<strong>public</strong>文件夹就能看到生成的文件。将其<strong>push</strong>到<strong>repository</strong>中就完成了。</p>
+<p>  此时查看根目录下 <strong>public</strong> 文件夹就能看到生成的文件。将其 <strong>push</strong> 到 <strong>repository</strong> 中就完成了。</p>
 <pre><code>$ cd public
 $ git init
 $ git remote add origin https://github.com/TezaLeMon/TezaLeMon.github.io.git
