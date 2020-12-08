@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.74.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>类C语言编译器-词法分析器 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+  
+  <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css" rel="stylesheet">
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+    
+  
+  <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>类C语言编译器-词法分析器</h1>
+  <time datetime=2020-12-08T13:51:36&#43;0800 class="post-date">Tue, Dec 8, 2020</time>
+  <p>  词法分析的主要任务就是对源程序代码进行分解为单个的词，并去除其中的注释内容。</p>
+<hr>
+<h2 id="字符分类">字符分类</h2>
+<p>  在本人实现的词法分析器中，将这些单词分为五类：保留字、运算符、界符、整数常数、标识符。（PS：只做了整型INT的识别，暂不支持浮点型FLOAT/DOUBLE的识别）</p>
+<p>  保留字：  int | bool | main | if | else | for | while | true | false | break | return</p>
+<p>  运算符：  + | - | * | / | % | &amp; | &amp;&amp; &hellip;</p>
+<p>  界  符：  , | ; | { | } | [ | ] &hellip;</p>
+<p>  整数常数：(digit)+</p>
+<p>  标识符：  ( _ | letter ) ( _ | letter | digit )+</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">
+<span style="color:#66d9ef">namespace</span> Tag
+{
+    <span style="color:#75715e">//保留字
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span>
+        INT <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>,
+        BOOL <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>,
+        MAIN <span style="color:#f92672">=</span> <span style="color:#ae81ff">3</span>,
+        IF <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span>, ELSE <span style="color:#f92672">=</span> <span style="color:#ae81ff">5</span>, FOR <span style="color:#f92672">=</span> <span style="color:#ae81ff">6</span>, WHILE <span style="color:#f92672">=</span> <span style="color:#ae81ff">7</span>, BREAK <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>, RETURN <span style="color:#f92672">=</span> <span style="color:#ae81ff">9</span>,
+        TRUE <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>, FALSE <span style="color:#f92672">=</span> <span style="color:#ae81ff">11</span>;
+
+    <span style="color:#75715e">//运算符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span>
+        NOT <span style="color:#f92672">=</span> <span style="color:#ae81ff">20</span>,       <span style="color:#75715e">//!
+</span><span style="color:#75715e"></span>        NE <span style="color:#f92672">=</span> <span style="color:#ae81ff">21</span>,        <span style="color:#75715e">//!=
+</span><span style="color:#75715e"></span>        AUTOMINUS <span style="color:#f92672">=</span> <span style="color:#ae81ff">22</span>, <span style="color:#75715e">//--
+</span><span style="color:#75715e"></span>        MINUS <span style="color:#f92672">=</span> <span style="color:#ae81ff">23</span>,     <span style="color:#75715e">//-
+</span><span style="color:#75715e"></span>        AUTOADD <span style="color:#f92672">=</span> <span style="color:#ae81ff">24</span>,   <span style="color:#75715e">//++
+</span><span style="color:#75715e"></span>        ADD <span style="color:#f92672">=</span> <span style="color:#ae81ff">25</span>,       <span style="color:#75715e">//+
+</span><span style="color:#75715e"></span>        BITOR <span style="color:#f92672">=</span> <span style="color:#ae81ff">26</span>,     <span style="color:#75715e">//|
+</span><span style="color:#75715e"></span>        OR <span style="color:#f92672">=</span> <span style="color:#ae81ff">27</span>,        <span style="color:#75715e">//||
+</span><span style="color:#75715e"></span>        BITAND <span style="color:#f92672">=</span> <span style="color:#ae81ff">28</span>,    <span style="color:#75715e">//&amp;
+</span><span style="color:#75715e"></span>        AND <span style="color:#f92672">=</span> <span style="color:#ae81ff">29</span>,       <span style="color:#75715e">//&amp;&amp;
+</span><span style="color:#75715e"></span>        MUTIPLY <span style="color:#f92672">=</span> <span style="color:#ae81ff">30</span>,   <span style="color:#75715e">//*
+</span><span style="color:#75715e"></span>        DIVIDE <span style="color:#f92672">=</span> <span style="color:#ae81ff">31</span>,    <span style="color:#75715e">///
+</span><span style="color:#75715e"></span>        MOD <span style="color:#f92672">=</span> <span style="color:#ae81ff">32</span>,       <span style="color:#75715e">//%
+</span><span style="color:#75715e"></span>        EQ <span style="color:#f92672">=</span> <span style="color:#ae81ff">33</span>,        <span style="color:#75715e">//==
+</span><span style="color:#75715e"></span>        ASSIN <span style="color:#f92672">=</span> <span style="color:#ae81ff">34</span>,     <span style="color:#75715e">//=
+</span><span style="color:#75715e"></span>        GE <span style="color:#f92672">=</span> <span style="color:#ae81ff">35</span>,        <span style="color:#75715e">//&gt;=
+</span><span style="color:#75715e"></span>        GT <span style="color:#f92672">=</span> <span style="color:#ae81ff">36</span>,        <span style="color:#75715e">//&gt;
+</span><span style="color:#75715e"></span>        LE <span style="color:#f92672">=</span> <span style="color:#ae81ff">37</span>,        <span style="color:#75715e">//&lt;=
+</span><span style="color:#75715e"></span>        LS <span style="color:#f92672">=</span> <span style="color:#ae81ff">38</span>;        <span style="color:#75715e">//&lt;
+</span><span style="color:#75715e"></span>
+    <span style="color:#75715e">//分界符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span>
+        COMMA <span style="color:#f92672">=</span> <span style="color:#ae81ff">60</span>,     <span style="color:#75715e">//,
+</span><span style="color:#75715e"></span>        SEMICOLON <span style="color:#f92672">=</span> <span style="color:#ae81ff">61</span>, <span style="color:#75715e">//;
+</span><span style="color:#75715e"></span>        LLBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">62</span>, <span style="color:#75715e">//(
+</span><span style="color:#75715e"></span>        RLBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">63</span>, <span style="color:#75715e">//)
+</span><span style="color:#75715e"></span>        LMBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">64</span>, <span style="color:#75715e">//[
+</span><span style="color:#75715e"></span>        RMBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">65</span>, <span style="color:#75715e">//]
+</span><span style="color:#75715e"></span>        LGBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">66</span>, <span style="color:#75715e">//{
+</span><span style="color:#75715e"></span>        RGBRACKET <span style="color:#f92672">=</span> <span style="color:#ae81ff">67</span>; <span style="color:#75715e">//}
+</span><span style="color:#75715e"></span>
+    <span style="color:#75715e">//整数常数
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> NUM <span style="color:#f92672">=</span> <span style="color:#ae81ff">98</span>;
+
+    <span style="color:#75715e">//标识符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> ID <span style="color:#f92672">=</span> <span style="color:#ae81ff">99</span>;
+
+    <span style="color:#75715e">//错误
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> ERROR <span style="color:#f92672">=</span> <span style="color:#ae81ff">999</span>;
+
+    <span style="color:#75715e">//结束符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> END <span style="color:#f92672">=</span> <span style="color:#ae81ff">100</span>;
+}
+
+</code></pre></div><hr>
+<h2 id="代码实现">代码实现</h2>
+<h3 id="数据结构定义">数据结构定义</h3>
+<p>  词法单元</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Word</span>
+{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+    std<span style="color:#f92672">::</span>string lexeme;
+    <span style="color:#66d9ef">int</span> tag;
+
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+    Word() <span style="color:#f92672">=</span> <span style="color:#66d9ef">default</span>;
+    Word(std<span style="color:#f92672">::</span>string s, <span style="color:#66d9ef">int</span> t) <span style="color:#f92672">:</span> lexeme(s), tag(t) {}
+    std<span style="color:#f92672">::</span>string getLexeme() { <span style="color:#66d9ef">return</span> lexeme; }
+    <span style="color:#66d9ef">int</span> <span style="color:#a6e22e">getTag</span>() { <span style="color:#66d9ef">return</span> tag; }
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setTag</span>(<span style="color:#66d9ef">int</span> t) { tag <span style="color:#f92672">=</span> t; }
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setLexeme</span>(std<span style="color:#f92672">::</span>string s) { lexeme <span style="color:#f92672">=</span> s; }
+};
+</code></pre></div><p>  词法分析器</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Lexer</span>
+{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+    std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, Word<span style="color:#f92672">&gt;</span> words;
+    <span style="color:#66d9ef">int</span> line;
+
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+    Lexer();
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">reserve</span>(Word w);
+    <span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">readnext</span>(<span style="color:#66d9ef">char</span> c, std<span style="color:#f92672">::</span>istringstream<span style="color:#f92672">&amp;</span> in);
+    Word <span style="color:#a6e22e">scan</span>(std<span style="color:#f92672">::</span>istringstream<span style="color:#f92672">&amp;</span> in);
+    <span style="color:#66d9ef">int</span> <span style="color:#a6e22e">getLine</span>() { <span style="color:#66d9ef">return</span> line; }
+};
+</code></pre></div><h3 id="具体实现">具体实现</h3>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">//判断是否为字母
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">IsLetter</span>(<span style="color:#66d9ef">char</span> letter) {
+    <span style="color:#75715e">//注意C语言允许下划线也为标识符的一部分 所以这里把 _ 也看做字母
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> ((letter <span style="color:#f92672">&gt;=</span> <span style="color:#e6db74">&#39;a&#39;</span> <span style="color:#f92672">&amp;&amp;</span> letter <span style="color:#f92672">&lt;=</span> <span style="color:#e6db74">&#39;z&#39;</span>) <span style="color:#f92672">||</span> (letter <span style="color:#f92672">&gt;=</span> <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">&amp;&amp;</span> letter <span style="color:#f92672">&lt;=</span> <span style="color:#e6db74">&#39;Z&#39;</span>) <span style="color:#f92672">||</span> letter <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;_&#39;</span>) {
+        <span style="color:#66d9ef">return</span> true;
+    } <span style="color:#66d9ef">else</span> {
+        <span style="color:#66d9ef">return</span> false;
+    }
+}
+
+<span style="color:#75715e">//判断是否为数字
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">IsDigit</span>(<span style="color:#66d9ef">char</span> digit) {
+    <span style="color:#66d9ef">if</span> (digit <span style="color:#f92672">&gt;=</span> <span style="color:#e6db74">&#39;0&#39;</span> <span style="color:#f92672">&amp;&amp;</span> digit <span style="color:#f92672">&lt;=</span> <span style="color:#e6db74">&#39;9&#39;</span>) {
+        <span style="color:#66d9ef">return</span> true;
+    } <span style="color:#66d9ef">else</span> {
+        <span style="color:#66d9ef">return</span> false;
+    }
+}
+
+<span style="color:#66d9ef">void</span> Lexer<span style="color:#f92672">::</span>reserve(Word w) {
+    words.insert({ w.getLexeme(), w });
+}
+
+Lexer<span style="color:#f92672">::</span>Lexer() {
+    <span style="color:#75715e">//存入保留字，为了区分标识符
+</span><span style="color:#75715e"></span>    reserve(Word(<span style="color:#e6db74">&#34;int&#34;</span>, Tag<span style="color:#f92672">::</span>INT));
+    reserve(Word(<span style="color:#e6db74">&#34;bool&#34;</span>, Tag<span style="color:#f92672">::</span>BOOL));
+    reserve(Word(<span style="color:#e6db74">&#34;main&#34;</span>, Tag<span style="color:#f92672">::</span>MAIN));
+    reserve(Word(<span style="color:#e6db74">&#34;if&#34;</span>, Tag<span style="color:#f92672">::</span>IF));
+    reserve(Word(<span style="color:#e6db74">&#34;else&#34;</span>, Tag<span style="color:#f92672">::</span>ELSE));
+    reserve(Word(<span style="color:#e6db74">&#34;for&#34;</span>, Tag<span style="color:#f92672">::</span>FOR));
+    reserve(Word(<span style="color:#e6db74">&#34;while&#34;</span>, Tag<span style="color:#f92672">::</span>WHILE));
+    reserve(Word(<span style="color:#e6db74">&#34;break&#34;</span>, Tag<span style="color:#f92672">::</span>BREAK));
+    reserve(Word(<span style="color:#e6db74">&#34;return&#34;</span>, Tag<span style="color:#f92672">::</span>RETURN));
+    reserve(Word(<span style="color:#e6db74">&#34;true&#34;</span>, Tag<span style="color:#f92672">::</span>TRUE));
+    reserve(Word(<span style="color:#e6db74">&#34;false&#34;</span>, Tag<span style="color:#f92672">::</span>FALSE));
+
+    line <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+}
+
+<span style="color:#75715e">//方便处理像&gt;=,++等这些两个字符连在一起的运算符
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> Lexer<span style="color:#f92672">::</span>readnext(<span style="color:#66d9ef">char</span> c, std<span style="color:#f92672">::</span>istringstream<span style="color:#f92672">&amp;</span> in) {
+    <span style="color:#66d9ef">if</span> (c <span style="color:#f92672">!=</span> in.peek()) {
+        <span style="color:#66d9ef">return</span> false;
+    }
+    in.get();
+    <span style="color:#66d9ef">return</span> true;
+}
+
+Word Lexer<span style="color:#f92672">::</span>scan(std<span style="color:#f92672">::</span>istringstream<span style="color:#f92672">&amp;</span> in) {
+    <span style="color:#66d9ef">char</span> ch;
+    <span style="color:#66d9ef">if</span> (in.eof()) {
+        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
+    }
+    <span style="color:#66d9ef">while</span> (<span style="color:#ae81ff">1</span>) {
+        ch <span style="color:#f92672">=</span> in.get();
+        <span style="color:#66d9ef">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39; &#39;</span> <span style="color:#f92672">||</span> ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;\t&#39;</span>) <span style="color:#75715e">//忽略空格及制表符
+</span><span style="color:#75715e"></span>            ;
+        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;\n&#39;</span>) {
+            <span style="color:#f92672">++</span>line;
+        }
+        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;/&#39;</span>) { <span style="color:#75715e">//忽略注释
+</span><span style="color:#75715e"></span>            <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;/&#39;</span>, in)) { <span style="color:#75715e">//忽略单行注释    //comment
+</span><span style="color:#75715e"></span>                <span style="color:#66d9ef">while</span> (ch <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39;\n&#39;</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span>in.eof()) {
+                    ch <span style="color:#f92672">=</span> in.get();
+                }
+                <span style="color:#66d9ef">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;\n&#39;</span>) {
+                    line<span style="color:#f92672">++</span>;
+                }
+                <span style="color:#66d9ef">else</span> {
+                    <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
+                }
+            }
+            <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;*&#39;</span>, in)) { <span style="color:#75715e">//忽略多行注释    /*comment*/
+</span><span style="color:#75715e"></span>                <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>readnext(<span style="color:#e6db74">&#39;*&#39;</span>, in)) {
+                    ch <span style="color:#f92672">=</span> in.get();
+                    <span style="color:#66d9ef">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;\n&#39;</span>)
+                        line<span style="color:#f92672">++</span>;
+                    <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>) <span style="color:#75715e">//eof
+</span><span style="color:#75715e"></span>                        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;error&#34;</span>, Tag<span style="color:#f92672">::</span>ERROR);
+                }
+                <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>readnext(<span style="color:#e6db74">&#39;/&#39;</span>, in)) {
+                    <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;error&#34;</span>, Tag<span style="color:#f92672">::</span>ERROR);
+                }
+            }
+        }
+        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (ch <span style="color:#f92672">==</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>) {<span style="color:#75715e">//eof
+</span><span style="color:#75715e"></span>            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
+        }
+        <span style="color:#66d9ef">else</span> {
+            <span style="color:#66d9ef">break</span>;
+        }
+    }
+
+    <span style="color:#75715e">//处理分界符、运算符等
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">switch</span> (ch) {
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;!&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;=&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;!=&#34;</span>, Tag<span style="color:#f92672">::</span>NE);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;!&#34;</span>, Tag<span style="color:#f92672">::</span>NOT);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;-&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;-&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;--&#34;</span>, Tag<span style="color:#f92672">::</span>AUTOMINUS);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;-&#34;</span>, Tag<span style="color:#f92672">::</span>MINUS);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;+&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;+&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;++&#34;</span>, Tag<span style="color:#f92672">::</span>AUTOADD);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;+&#34;</span>, Tag<span style="color:#f92672">::</span>ADD);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;|&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;|&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;||&#34;</span>, Tag<span style="color:#f92672">::</span>OR);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;|&#34;</span>, Tag<span style="color:#f92672">::</span>BITOR);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;&amp;&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;&amp;&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;&amp;&amp;&#34;</span>, Tag<span style="color:#f92672">::</span>AND);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;&amp;&#34;</span>, Tag<span style="color:#f92672">::</span>BITAND);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;*&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;*&#34;</span>, Tag<span style="color:#f92672">::</span>MUTIPLY);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;/&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;/&#34;</span>, Tag<span style="color:#f92672">::</span>DIVIDE);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;%&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;%&#34;</span>, Tag<span style="color:#f92672">::</span>MOD);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;=&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;=&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;==&#34;</span>, Tag<span style="color:#f92672">::</span>EQ);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;=&#34;</span>, Tag<span style="color:#f92672">::</span>ASSIN);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;&gt;&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;=&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;&gt;=&#34;</span>, Tag<span style="color:#f92672">::</span>GE);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;&gt;&#34;</span>, Tag<span style="color:#f92672">::</span>GT);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;&lt;&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">if</span> (readnext(<span style="color:#e6db74">&#39;=&#39;</span>, in))
+            <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;&lt;=&#34;</span>, Tag<span style="color:#f92672">::</span>LE);
+        <span style="color:#66d9ef">else</span>
+            <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;&lt;&#34;</span>, Tag<span style="color:#f92672">::</span>LS);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;,&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;,&#34;</span>, Tag<span style="color:#f92672">::</span>COMMA);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;;&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;;&#34;</span>, Tag<span style="color:#f92672">::</span>SEMICOLON);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;(&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;(&#34;</span>, Tag<span style="color:#f92672">::</span>LLBRACKET);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;)&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;)&#34;</span>, Tag<span style="color:#f92672">::</span>RLBRACKET);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;[&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;[&#34;</span>, Tag<span style="color:#f92672">::</span>LMBRACKET);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;]&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;]&#34;</span>, Tag<span style="color:#f92672">::</span>RMBRACKET);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;{&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;{&#34;</span>, Tag<span style="color:#f92672">::</span>LGBRACKET);
+    <span style="color:#66d9ef">case</span> <span style="color:#e6db74">&#39;}&#39;</span><span style="color:#f92672">:</span>
+        <span style="color:#66d9ef">return</span> Word(<span style="color:#e6db74">&#34;}&#34;</span>, Tag<span style="color:#f92672">::</span>RGBRACKET);
+    }
+
+    <span style="color:#75715e">//处理常数
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (IsDigit(ch)) {
+        std<span style="color:#f92672">::</span>string tmp;
+        tmp.push_back(ch);
+        <span style="color:#66d9ef">while</span> (IsDigit(in.peek())) {
+            ch <span style="color:#f92672">=</span> in.get();
+            tmp.push_back(ch);
+        }
+        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(tmp, Tag<span style="color:#f92672">::</span>NUM);
+    }
+
+    <span style="color:#75715e">//处理标识符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> (IsLetter(ch)) {
+        std<span style="color:#f92672">::</span>string tmp;
+        tmp.push_back(ch);
+        <span style="color:#66d9ef">while</span> (IsLetter(in.peek())) {
+            ch <span style="color:#f92672">=</span> in.get();
+            tmp.push_back(ch);
+        }
+
+        <span style="color:#75715e">//判断是否为保留字
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">if</span> (words.find(tmp) <span style="color:#f92672">!=</span> words.end()) {
+            <span style="color:#66d9ef">return</span> words[tmp];
+        } <span style="color:#66d9ef">else</span> {
+            Word w <span style="color:#f92672">=</span> Word(tmp, Tag<span style="color:#f92672">::</span>ID);
+            reserve(w);
+            <span style="color:#66d9ef">return</span> w;
+        }
+    }
+
+    <span style="color:#66d9ef">if</span> (ch <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39; &#39;</span> <span style="color:#f92672">&amp;&amp;</span> ch <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39;\t&#39;</span> <span style="color:#f92672">&amp;&amp;</span> ch <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39;\n&#39;</span>) {
+        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;error&#34;</span>, Tag<span style="color:#f92672">::</span>ERROR);
+    }
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
+}
+</code></pre></div><p>  每次调用 <em>Lexer::scan</em> 会返回一个 <em>Word</em> 变量。使用时循环调用 <em>scan</em> 直到输入流到末尾，每次循环对返回的 <em>Word</em> 变量进行输出，即可得到完整的词法分析结果。</p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>
