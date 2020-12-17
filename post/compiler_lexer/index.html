@@ -65,9 +65,8 @@
 <p>  运算符：  + | - | * | / | % | &amp; | &amp;&amp; &hellip;</p>
 <p>  界  符：  , | ; | { | } | [ | ] &hellip;</p>
 <p>  整数常数：(digit)+</p>
-<p>  标识符：  ( _ | letter ) ( _ | letter | digit )+</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">
-<span style="color:#66d9ef">namespace</span> Tag
+<p>  标识符：  ( _ | letter ) ( _ | letter | digit )*</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">namespace</span> Tag
 {
     <span style="color:#75715e">//保留字
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span>
@@ -122,7 +121,6 @@
     <span style="color:#75715e">//结束符
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> END <span style="color:#f92672">=</span> <span style="color:#ae81ff">100</span>;
 }
-
 </code></pre></div><hr>
 <h2 id="代码实现">代码实现</h2>
 <h3 id="数据结构定义">数据结构定义</h3>
@@ -352,6 +350,9 @@ Word Lexer<span style="color:#f92672">::</span>scan(std<span style="color:#f9267
     <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
 }
 </code></pre></div><p>  每次调用 <em>Lexer::scan</em> 会返回一个 <em>Word</em> 变量。使用时循环调用 <em>scan</em> 直到输入流到末尾，每次循环对返回的 <em>Word</em> 变量进行输出，即可得到完整的词法分析结果。</p>
+<p>参考博客：</p>
+<p><a href="https://www.cnblogs.com/vachester/p/6884345.html">https://www.cnblogs.com/vachester/p/6884345.html</a></p>
+<p><a href="https://www.cnblogs.com/zyrblog/p/6885922.html">https://www.cnblogs.com/zyrblog/p/6885922.html</a></p>
 
 </div>
 
