@@ -332,8 +332,8 @@ pthread_mutex_t lock;
 }
 </code></pre></div><div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># g++ -o mutexDemo mutexDemo.cpp -std=c++11 -lpthread</span>
 <span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># ./mutexDemo</span> 
-add2 complete	sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">3725</span>
-add1 complete	sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">4950</span>
+add2 complete   sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">3725</span>
+add1 complete   sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">4950</span>
 sum <span style="color:#ae81ff">4950</span>
 </code></pre></div><h2 id="线程安全">线程安全</h2>
 <p>  在拥有共享数据的多条线程并行执行的程序中，线程安全的代码会通过同步机制保证各个线程都可以正常且正确的执行，不会出现数据污染等意外情况。</p>
