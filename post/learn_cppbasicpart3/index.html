@@ -100,7 +100,7 @@
 </span></code></pre></div><h3 id="信号驱动io模型">信号驱动IO模型</h3>
 <p>  所谓信号驱动，就是利用信号机制，安装信号 <em>SIGIO</em> 的处理函数（进行IO相关操作），通过监控文件描述符，当其就绪时，通知目标进程进行IO操作（<em>signal handler</em>）。</p>
 <h3 id="异步io模型">异步IO模型</h3>
-<p>  应用进程执行 aio_read 系统调用会立即返回，应用进程可以继续执行，不会被阻塞，内核会在所有操作完成之后向应用进程发送信号。</p>
+<p>  应用进程执行 <em>aio_read</em> 系统调用会立即返回，应用进程可以继续执行，不会被阻塞，内核会在所有操作完成之后向应用进程发送信号。</p>
 <p>  &ldquo;真正&quot;的异步IO需要操作系统更强的支持。在IO多路复用模型中，事件循环将文件句柄的状态事件通知给用户线程，由用户线程自行读取数据、处理数据。而在异步IO模型中，当用户线程收到通知时，数据已经被内核读取完毕，并放在了用户线程指定的缓冲区内，内核在IO完成后通知用户线程直接使用即可。</p>
 <p>  异步 I/O 与信号驱动 I/O 的区别在于，异步 I/O 的信号是通知应用进程 I/O 完成，而信号驱动 I/O 的信号是通知应用进程可以开始 I/O。</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">void</span> UserCompletionHandler<span style="color:#f92672">::</span>handle_event(buffer) 
