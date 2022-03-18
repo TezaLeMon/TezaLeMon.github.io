@@ -1,65 +1,78 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+
 <head>
   <link href="https://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   <meta name="generator" content="Hugo 0.90.1" />
 
-  
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Verilog实现32位除法器 &middot; Teza小站</title>
   <meta name="description" content="" />
 
-  
+
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
 
 
-  
+  <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
+    rel="stylesheet">
+
+
   <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
   <link rel="shortcut icon" href="../../favicon.png">
 
-  
-  
+
+
+
+
+  <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+<body class="theme-base-0c ">
   <aside class="sidebar">
-  <div class="container sidebar-sticky">
-    <div class="sidebar-about">
-      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
-      <p class="lead">
-       无名小站，始于2020-7-14，记录某大学仔学习历程。 
-      </p>
+    <div class="container sidebar-sticky">
+      <div class="sidebar-about">
+        <a href="https://TezaLeMon.github.io/">
+          <h1>Teza小站</h1>
+        </a>
+        <p class="lead">
+          无名小站，始于2020-7-14，记录某大学仔学习历程。
+        </p>
+      </div>
+
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+
+        </ul>
+      </nav>
+
+      <p>Copyright (c) 2020, Guanda Wei</p>
     </div>
+  </aside>
 
-    <nav>
-      <ul class="sidebar-nav">
-        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
-        
-      </ul>
-    </nav>
-
-    <p>Copyright (c) 2020, Guanda Wei</p>
-  </div>
-</aside>
-
-    <main class="content container">
+  <main class="content container">
     <div class="post">
-  <h1>Verilog实现32位除法器</h1>
-  <time datetime=2020-07-22T23:37:36&#43;0800 class="post-date">Wed, Jul 22, 2020</time>
-  <p>  实现乘法器有多种思路，本次作业采用的是不恢复余数的方式。下面是对两种参考思路的介绍。</p>
-<h2 id="基于移位减法的恢复余数除法器">基于移位、减法的恢复余数除法器</h2>
-<p>  对于32位无符号除法，可将被除数a转换成高32位为0低32位是a的数temp_a，在每个周期开始时 temp_a 向左移动一位，最后一位补零，然后判断 temp_a 的高 32 位是否大于等于除数b，如是则 temp_a 的高32位减去b并且加1，得到的值赋给 temp_a，如果不是则直接进入下一步，执行结束后 temp_a 的高 32 位即为余数，低 32 位即为商。对于 32 位有符号除法，可先将有符号数转换成无符号数除法，根据被除数和除数的符号判断商的符号，被除数是负数时余数为负，否则为正。</p>
-<h2 id="不恢复余数除法器">不恢复余数除法器</h2>
-<p>  不恢复余数即不管相减结果是正还是负，都把它写入 reg_r，若为负，下次迭代不是从中减去除数而是加上除数。</p>
-<h3 id="verilog实现">Verilog实现</h3>
-<p>  无符号除法器时钟信号下降沿时检查 <strong>start</strong> 信号，有效时开始执行，执行除法指令时，busy 标志位置 1。在执行除法指令时，任何情况下不产生算数异常，当除数为 0 时，运算结果未知，对除法器除数为 0 和溢出情况的发生通过汇编指令中其他指令进行检查和处理。无符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
-<pre tabindex="0"><code>`timescale 1ns / 1ps
+      <h1>Verilog实现32位除法器</h1>
+      <time datetime=2020-07-22T23:37:36&#43;0800 class="post-date">Wed, Jul 22, 2020</time>
+      <p>  实现乘法器有多种思路，本次作业采用的是不恢复余数的方式。下面是对两种参考思路的介绍。</p>
+      <h2 id="基于移位减法的恢复余数除法器">基于移位、减法的恢复余数除法器</h2>
+      <p>  对于32位无符号除法，可将被除数a转换成高32位为0低32位是a的数temp_a，在每个周期开始时 temp_a 向左移动一位，最后一位补零，然后判断 temp_a 的高 32 位是否大于等于除数b，如是则
+        temp_a 的高32位减去b并且加1，得到的值赋给 temp_a，如果不是则直接进入下一步，执行结束后 temp_a 的高 32 位即为余数，低 32 位即为商。对于 32
+        位有符号除法，可先将有符号数转换成无符号数除法，根据被除数和除数的符号判断商的符号，被除数是负数时余数为负，否则为正。</p>
+      <h2 id="不恢复余数除法器">不恢复余数除法器</h2>
+      <p>  不恢复余数即不管相减结果是正还是负，都把它写入 reg_r，若为负，下次迭代不是从中减去除数而是加上除数。</p>
+      <h3 id="verilog实现">Verilog实现</h3>
+      <p>  无符号除法器时钟信号下降沿时检查 <strong>start</strong> 信号，有效时开始执行，执行除法指令时，busy 标志位置 1。在执行除法指令时，任何情况下不产生算数异常，当除数为 0
+        时，运算结果未知，对除法器除数为 0 和溢出情况的发生通过汇编指令中其他指令进行检查和处理。无符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
+      <pre tabindex="0"><code>`timescale 1ns / 1ps
 
 module DIVU(
     input   [31:0]  dividend,   //被除数
@@ -109,8 +122,9 @@ module DIVU(
         end
     end
 endmodule
-</code></pre><p>  有符号运算中基本和无符号除法器类似，需要注意余数应与被除数符号一致，<em><strong>Verilog</strong></em> 代码如下：</p>
-<pre tabindex="0"><code>`timescale 1ns / 1ps
+</code></pre>
+      <p>  有符号运算中基本和无符号除法器类似，需要注意余数应与被除数符号一致，<em><strong>Verilog</strong></em> 代码如下：</p>
+      <pre tabindex="0"><code>`timescale 1ns / 1ps
 
 module DIV(
     input   [31:0]  dividend,   //被除数
@@ -157,13 +171,14 @@ module DIV(
     end
 endmodule
 </code></pre>
-</div>
+    </div>
 
 
-    </main>
+  </main>
 
-    
-      
-    
-  </body>
+
+
+
+</body>
+
 </html>

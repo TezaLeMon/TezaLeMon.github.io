@@ -1,67 +1,79 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+
 <head>
-  <link href="https://gmpg.org/xfn/11" rel="profile">
-  <meta http-equiv="content-type" content="text/html; charset=utf-8">
-  <meta name="generator" content="Hugo 0.90.1" />
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <meta name="generator" content="Hugo 0.90.1" />
 
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>类C语言编译器-词法分析器 &middot; Teza小站</title>
-  <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
-  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <title>类C语言编译器-词法分析器 &middot; Teza小站</title>
+    <meta name="description" content="" />
+
+
+    <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+    <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+    <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+    <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
 
 
-  
-  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
-  <link rel="shortcut icon" href="../../favicon.png">
+    <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
+        rel="stylesheet">
 
-  
-  
+
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="../../favicon.png">
+
+
+
+
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
-  <aside class="sidebar">
-  <div class="container sidebar-sticky">
-    <div class="sidebar-about">
-      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
-      <p class="lead">
-       无名小站，始于2020-7-14，记录某大学仔学习历程。 
-      </p>
-    </div>
+<body class="theme-base-0c ">
+    <aside class="sidebar">
+        <div class="container sidebar-sticky">
+            <div class="sidebar-about">
+                <a href="https://TezaLeMon.github.io/">
+                    <h1>Teza小站</h1>
+                </a>
+                <p class="lead">
+                    无名小站，始于2020-7-14，记录某大学仔学习历程。
+                </p>
+            </div>
 
-    <nav>
-      <ul class="sidebar-nav">
-        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
-        
-      </ul>
-    </nav>
+            <nav>
+                <ul class="sidebar-nav">
+                    <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
 
-    <p>Copyright (c) 2020, Guanda Wei</p>
-  </div>
-</aside>
+                </ul>
+            </nav>
+
+            <p>Copyright (c) 2020, Guanda Wei</p>
+        </div>
+    </aside>
 
     <main class="content container">
-    <div class="post">
-  <h1>类C语言编译器-词法分析器</h1>
-  <time datetime=2020-12-08T13:51:36&#43;0800 class="post-date">Tue, Dec 8, 2020</time>
-  <p>  词法分析的主要任务就是对源程序代码进行分解为单个的词，并去除其中的注释内容。</p>
-<hr>
-<h2 id="字符分类">字符分类</h2>
-<p>  在本人实现的词法分析器中，将这些单词分为五类：保留字、运算符、界符、整数常数、标识符。（PS：只做了整型INT的识别，暂不支持浮点型FLOAT/DOUBLE的识别）</p>
-<p>  保留字：  int | bool | main | if | else | for | while | true | false | break | return</p>
-<p>  运算符：  + | - | * | / | % | &amp; | &amp;&amp; &hellip;</p>
-<p>  界  符：  , | ; | { | } | [ | ] &hellip;</p>
-<p>  整数常数：(digit)+</p>
-<p>  标识符：  ( _ | letter ) ( _ | letter | digit )*</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">namespace</span> Tag
+        <div class="post">
+            <h1>类C语言编译器-词法分析器</h1>
+            <time datetime=2020-12-08T13:51:36&#43;0800 class="post-date">Tue, Dec 8, 2020</time>
+            <p>  词法分析的主要任务就是对源程序代码进行分解为单个的词，并去除其中的注释内容。</p>
+            <hr>
+            <h2 id="字符分类">字符分类</h2>
+            <p>  在本人实现的词法分析器中，将这些单词分为五类：保留字、运算符、界符、整数常数、标识符。（PS：只做了整型INT的识别，暂不支持浮点型FLOAT/DOUBLE的识别）</p>
+            <p>  保留字： int | bool | main | if | else | for | while | true | false | break | return</p>
+            <p>  运算符： + | - | * | / | % | &amp; | &amp;&amp; &hellip;</p>
+            <p>  界 符： , | ; | { | } | [ | ] &hellip;</p>
+            <p>  整数常数：(digit)+</p>
+            <p>  标识符： ( _ | letter ) ( _ | letter | digit )*</p>
+            <div class="highlight">
+                <pre tabindex="0"
+                    style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">namespace</span> Tag
 {
     <span style="color:#75715e">//保留字
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span>
@@ -116,11 +128,15 @@
     <span style="color:#75715e">//结束符
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#66d9ef">int</span> END <span style="color:#f92672">=</span> <span style="color:#ae81ff">100</span>;
 }
-</code></pre></div><hr>
-<h2 id="代码实现">代码实现</h2>
-<h3 id="数据结构定义">数据结构定义</h3>
-<p>  词法单元</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Word</span>
+</code></pre>
+            </div>
+            <hr>
+            <h2 id="代码实现">代码实现</h2>
+            <h3 id="数据结构定义">数据结构定义</h3>
+            <p>  词法单元</p>
+            <div class="highlight">
+                <pre tabindex="0"
+                    style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Word</span>
 {
 <span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
     std<span style="color:#f92672">::</span>string lexeme;
@@ -134,8 +150,12 @@
     <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setTag</span>(<span style="color:#66d9ef">int</span> t) { tag <span style="color:#f92672">=</span> t; }
     <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setLexeme</span>(std<span style="color:#f92672">::</span>string s) { lexeme <span style="color:#f92672">=</span> s; }
 };
-</code></pre></div><p>  词法分析器</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Lexer</span>
+</code></pre>
+            </div>
+            <p>  词法分析器</p>
+            <div class="highlight">
+                <pre tabindex="0"
+                    style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Lexer</span>
 {
 <span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
     std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, Word<span style="color:#f92672">&gt;</span> words;
@@ -148,8 +168,12 @@
     Word <span style="color:#a6e22e">scan</span>(std<span style="color:#f92672">::</span>istringstream<span style="color:#f92672">&amp;</span> in);
     <span style="color:#66d9ef">int</span> <span style="color:#a6e22e">getLine</span>() { <span style="color:#66d9ef">return</span> line; }
 };
-</code></pre></div><h3 id="具体实现">具体实现</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">//判断是否为字母
+</code></pre>
+            </div>
+            <h3 id="具体实现">具体实现</h3>
+            <div class="highlight">
+                <pre tabindex="0"
+                    style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-C++" data-lang="C++"><span style="color:#75715e">//判断是否为字母
 </span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">IsLetter</span>(<span style="color:#66d9ef">char</span> letter) {
     <span style="color:#75715e">//注意C语言允许下划线也为标识符的一部分 所以这里把 _ 也看做字母
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> ((letter <span style="color:#f92672">&gt;=</span> <span style="color:#e6db74">&#39;a&#39;</span> <span style="color:#f92672">&amp;&amp;</span> letter <span style="color:#f92672">&lt;=</span> <span style="color:#e6db74">&#39;z&#39;</span>) <span style="color:#f92672">||</span> (letter <span style="color:#f92672">&gt;=</span> <span style="color:#e6db74">&#39;A&#39;</span> <span style="color:#f92672">&amp;&amp;</span> letter <span style="color:#f92672">&lt;=</span> <span style="color:#e6db74">&#39;Z&#39;</span>) <span style="color:#f92672">||</span> letter <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;_&#39;</span>) {
@@ -344,18 +368,26 @@ Word Lexer<span style="color:#f92672">::</span>scan(std<span style="color:#f9267
     }
     <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Word</span>(<span style="color:#e6db74">&#34;#&#34;</span>, Tag<span style="color:#f92672">::</span>END);
 }
-</code></pre></div><p>  每次调用 <em>Lexer::scan</em> 会返回一个 <em>Word</em> 变量。使用时循环调用 <em>scan</em> 直到输入流到末尾，每次循环对返回的 <em>Word</em> 变量进行输出，即可得到完整的词法分析结果。</p>
-<p>参考博客：</p>
-<p><a href="https://www.cnblogs.com/vachester/p/6884345.html">https://www.cnblogs.com/vachester/p/6884345.html</a></p>
-<p><a href="https://www.cnblogs.com/zyrblog/p/6885922.html">https://www.cnblogs.com/zyrblog/p/6885922.html</a></p>
+</code></pre>
+            </div>
+            <p>  每次调用 <em>Lexer::scan</em> 会返回一个 <em>Word</em> 变量。使用时循环调用 <em>scan</em> 直到输入流到末尾，每次循环对返回的 <em>Word</em>
+                变量进行输出，即可得到完整的词法分析结果。</p>
+            <p>参考博客：</p>
+            <p><a
+                    href="https://www.cnblogs.com/vachester/p/6884345.html">https://www.cnblogs.com/vachester/p/6884345.html</a>
+            </p>
+            <p><a
+                    href="https://www.cnblogs.com/zyrblog/p/6885922.html">https://www.cnblogs.com/zyrblog/p/6885922.html</a>
+            </p>
 
-</div>
+        </div>
 
 
     </main>
 
-    
-      
-    
-  </body>
+
+
+
+</body>
+
 </html>
