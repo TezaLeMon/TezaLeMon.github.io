@@ -1,148 +1,141 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
-
 <head>
   <link href="https://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   <meta name="generator" content="Hugo 0.90.1" />
 
-
+  
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Verilog实现32位乘法器 &middot; Teza小站</title>
   <meta name="description" content="" />
 
-
+  
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+  
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+<link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
+  rel="stylesheet">
 
-
-  <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
-    rel="stylesheet">
-
-
+  
   <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
   <link rel="shortcut icon" href="../../favicon.png">
 
-
-
-
-
-  <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
-  <script>hljs.initHighlightingOnLoad();</script>
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-<body class="theme-base-0c ">
+  <body class="theme-base-0c ">
   <aside class="sidebar">
-    <div class="container sidebar-sticky">
-      <div class="sidebar-about">
-        <a href="https://TezaLeMon.github.io/">
-          <h1>Teza小站</h1>
-        </a>
-        <p class="lead">
-          无名小站，始于2020-7-14，记录某大学仔学习历程。
-        </p>
-      </div>
-
-      <nav>
-        <ul class="sidebar-nav">
-          <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
-
-        </ul>
-      </nav>
-
-      <p>Copyright (c) 2020, Guanda Wei</p>
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
     </div>
-  </aside>
 
-  <main class="content container">
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
     <div class="post">
-      <h1>Verilog实现32位乘法器</h1>
-      <time datetime=2020-07-16T14:05:38&#43;0800 class="post-date">Thu, Jul 16, 2020</time>
-      <p>  实现乘法器有多种思路，本次作业了解了Wallace Tree算法和移位相加的方式。最终采取移位相加的方式实现。下面是对两种方式的介绍。</p>
-      <h2 id="wallace-tree算法">Wallace Tree算法</h2>
-      <p>  Wallace Tree 主要思想是：将三行变成2行，实际相当于3位到2位的压缩器，简称3-2压缩器。通过合理的分配处理乘法中出现的大量部分积。因为有很多运算是可以并行计算的，所以能够极大提高运算速度。</p>
-      <p>  具体讲解参照以下两篇博客（8位乘法）：</p>
-      <p>  <a href="https://www.cnblogs.com/wangkai2019/p/11153887.html">乘法器——Wallace树型乘法器</a></p>
-      <p>  <a href="https://blog.csdn.net/shishu8385/article/details/103996821">Wallace Tree 图解</a></p>
-      <h3 id="全加器">全加器</h3>
-      <p>  全加器是Wallace Tree算法中需要用到的一个部件。</p>
-      <p><img src="../../img/verilog_multu/%E5%85%A8%E5%8A%A0%E5%99%A8.jpg" alt="全加器"></p>
-      <table>
-        <thead>
-          <tr>
-            <th>Ci-1</th>
-            <th>A</th>
-            <th>B</th>
-            <th>S</th>
-            <th>Ci</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>0</td>
-            <td>0</td>
-            <td>0</td>
-            <td>0</td>
-            <td>0</td>
-          </tr>
-          <tr>
-            <td>0</td>
-            <td>0</td>
-            <td>1</td>
-            <td>1</td>
-            <td>0</td>
-          </tr>
-          <tr>
-            <td>0</td>
-            <td>1</td>
-            <td>0</td>
-            <td>1</td>
-            <td>0</td>
-          </tr>
-          <tr>
-            <td>0</td>
-            <td>1</td>
-            <td>1</td>
-            <td>0</td>
-            <td>1</td>
-          </tr>
-          <tr>
-            <td>1</td>
-            <td>0</td>
-            <td>0</td>
-            <td>1</td>
-            <td>0</td>
-          </tr>
-          <tr>
-            <td>1</td>
-            <td>0</td>
-            <td>1</td>
-            <td>0</td>
-            <td>1</td>
-          </tr>
-          <tr>
-            <td>1</td>
-            <td>1</td>
-            <td>0</td>
-            <td>0</td>
-            <td>1</td>
-          </tr>
-          <tr>
-            <td>1</td>
-            <td>1</td>
-            <td>1</td>
-            <td>1</td>
-            <td>1</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><em><strong>Verilog</strong></em> 实现：</p>
-      <div class="highlight">
-        <pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">module</span> FA(A, B, Cin, Sum, Count);
+  <h1>Verilog实现32位乘法器</h1>
+  <time datetime=2020-07-16T14:05:38&#43;0800 class="post-date">Thu, Jul 16, 2020</time>
+  <p>  实现乘法器有多种思路，本次作业了解了Wallace Tree算法和移位相加的方式。最终采取移位相加的方式实现。下面是对两种方式的介绍。</p>
+<h2 id="wallace-tree算法">Wallace Tree算法</h2>
+<p>  Wallace Tree 主要思想是：将三行变成2行，实际相当于3位到2位的压缩器，简称3-2压缩器。通过合理的分配处理乘法中出现的大量部分积。因为有很多运算是可以并行计算的，所以能够极大提高运算速度。</p>
+<p>  具体讲解参照以下两篇博客（8位乘法）：</p>
+<p>  <a href="https://www.cnblogs.com/wangkai2019/p/11153887.html">乘法器——Wallace树型乘法器</a></p>
+<p>  <a href="https://blog.csdn.net/shishu8385/article/details/103996821">Wallace Tree 图解</a></p>
+<h3 id="全加器">全加器</h3>
+<p>  全加器是Wallace Tree算法中需要用到的一个部件。</p>
+<p><img src="../../img/verilog_multu/%E5%85%A8%E5%8A%A0%E5%99%A8.jpg" alt="全加器"></p>
+<table>
+<thead>
+<tr>
+<th>Ci-1</th>
+<th>A</th>
+<th>B</th>
+<th>S</th>
+<th>Ci</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p><em><strong>Verilog</strong></em> 实现：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">module</span> FA(A, B, Cin, Sum, Count);
     <span style="color:#66d9ef">input</span> A;
     <span style="color:#66d9ef">input</span> B;
     <span style="color:#66d9ef">input</span> Cin;
@@ -158,16 +151,13 @@
     <span style="color:#66d9ef">and</span> A3 (T1, A, Cin);
     <span style="color:#66d9ef">or</span> O1 (Count, T1, T2, T3 );
 <span style="color:#66d9ef">endmodule</span>
-</code></pre>
-      </div>
-      <h3 id="verilog实现">Verilog实现</h3>
-      <p>  因为是32位乘法，分为16级全加器。由于实现代码的冗长，32位×32位会导致每一级需要有1~6个全加器，而每一级也有32个分支，需要手写的部分非常多。故没有采取这种方式来实现。</p>
-      <h2 id="移位相加算法">移位相加算法</h2>
-      <p>  两个二进制数 a 和 b 相乘，可以认为是 a 和 b 的每一位相乘后移位后的结果相加。</p>
-      <p>  关于 a 与 b 的每一位相乘产生的中间结果，如果 b 那位是 0，那么中间结果就是 0；如果是 1，那么中间结果就是在 a 前后补上相应位数的零通过字符拼接的方式表示。然后将这些中间乘积相加就是最后的结果。</p>
-      <p>  无符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
-      <div class="highlight">
-        <pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">`timescale</span> <span style="color:#ae81ff">1</span>ns <span style="color:#f92672">/</span> <span style="color:#ae81ff">1</span>ps
+</code></pre></div><h3 id="verilog实现">Verilog实现</h3>
+<p>  因为是32位乘法，分为16级全加器。由于实现代码的冗长，32位×32位会导致每一级需要有1~6个全加器，而每一级也有32个分支，需要手写的部分非常多。故没有采取这种方式来实现。</p>
+<h2 id="移位相加算法">移位相加算法</h2>
+<p>  两个二进制数 a 和 b 相乘，可以认为是 a 和 b 的每一位相乘后移位后的结果相加。</p>
+<p>  关于 a 与 b 的每一位相乘产生的中间结果，如果 b 那位是 0，那么中间结果就是 0；如果是 1，那么中间结果就是在 a 前后补上相应位数的零通过字符拼接的方式表示。然后将这些中间乘积相加就是最后的结果。</p>
+<p>  无符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">`timescale</span> <span style="color:#ae81ff">1</span>ns <span style="color:#f92672">/</span> <span style="color:#ae81ff">1</span>ps
 
 <span style="color:#66d9ef">module</span> MULTU(
     <span style="color:#66d9ef">input</span>           clk,    <span style="color:#75715e">// 乘法器时钟信号
@@ -360,11 +350,8 @@
         <span style="color:#66d9ef">end</span>
     <span style="color:#66d9ef">end</span>
 <span style="color:#66d9ef">endmodule</span>
-</code></pre>
-      </div>
-      <p>  有符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
-      <div class="highlight">
-        <pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">`timescale</span> <span style="color:#ae81ff">1</span>ns <span style="color:#f92672">/</span> <span style="color:#ae81ff">1</span>ps
+</code></pre></div><p>  有符号运算 <em><strong>Verilog</strong></em> 代码如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-verilog" data-lang="verilog"><span style="color:#66d9ef">`timescale</span> <span style="color:#ae81ff">1</span>ns <span style="color:#f92672">/</span> <span style="color:#ae81ff">1</span>ps
 
 <span style="color:#66d9ef">module</span> MULT(
     <span style="color:#66d9ef">input</span>           clk,    <span style="color:#75715e">// 乘法器时钟信号
@@ -566,16 +553,14 @@
         <span style="color:#66d9ef">end</span>
     <span style="color:#66d9ef">end</span>
 <span style="color:#66d9ef">endmodule</span>
-</code></pre>
-      </div>
-    </div>
+</code></pre></div>
+</div>
 
 
-  </main>
+    </main>
 
-
-
-
-</body>
-
+    
+      
+    
+  </body>
 </html>

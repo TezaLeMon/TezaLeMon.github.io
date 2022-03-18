@@ -1,77 +1,60 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://TezaLeMon.github.io/post/</loc>
     <lastmod>2022-03-18T16:14:54+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/</loc>
     <lastmod>2022-03-18T16:14:54+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_vue01/</loc>
     <lastmod>2022-03-18T16:14:54+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/typora_settings01/</loc>
     <lastmod>2022-03-18T16:11:51+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/alfred4_1/</loc>
     <lastmod>2021-12-10T11:16:29+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_javathread02/</loc>
     <lastmod>2021-10-10T17:33:08+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_javathread01/</loc>
     <lastmod>2021-09-15T23:01:20+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_cppbasicpart4/</loc>
     <lastmod>2021-03-09T15:24:16+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_cppbasicpart3/</loc>
     <lastmod>2021-03-09T13:20:31+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_cppbasicpart2/</loc>
     <lastmod>2021-03-08T15:35:53+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/learn_cppbasicpart1/</loc>
     <lastmod>2021-03-07T10:58:24+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/compiler_parser/</loc>
     <lastmod>2020-12-09T18:05:54+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/compiler_lexer/</loc>
     <lastmod>2020-12-08T13:51:36+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/verilog_divu/</loc>
     <lastmod>2020-07-22T23:37:36+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/verilog_multu/</loc>
     <lastmod>2020-07-16T14:05:38+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/hyde-customize/</loc>
     <lastmod>2020-07-14T15:50:48+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/post/hellohugo/</loc>
     <lastmod>2020-07-14T15:21:40+08:00</lastmod>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/categories/</loc>
-  </url>
-  <url>
+  </url><url>
     <loc>https://TezaLeMon.github.io/tags/</loc>
   </url>
 </urlset>

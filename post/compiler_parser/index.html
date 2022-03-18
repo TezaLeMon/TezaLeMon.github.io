@@ -1,80 +1,70 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
-
 <head>
-	<link href="https://gmpg.org/xfn/11" rel="profile">
-	<meta http-equiv="content-type" content="text/html; charset=utf-8">
-	<meta name="generator" content="Hugo 0.90.1" />
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
 
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>类C语言编译器-语法分析器 &middot; Teza小站</title>
+  <meta name="description" content="" />
 
-	<title>类C语言编译器-语法分析器 &middot; Teza小站</title>
-	<meta name="description" content="" />
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+  
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+<link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
+  rel="stylesheet">
 
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
 
-	<link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
-	<link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
-	<link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
-	<link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
-	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
-
-
-	<link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
-		rel="stylesheet">
-
-
-	<link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
-	<link rel="shortcut icon" href="../../favicon.png">
-
-
-
-
-
-	<script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
-	<script>hljs.initHighlightingOnLoad();</script>
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-<body class="theme-base-0c ">
-	<aside class="sidebar">
-		<div class="container sidebar-sticky">
-			<div class="sidebar-about">
-				<a href="https://TezaLeMon.github.io/">
-					<h1>Teza小站</h1>
-				</a>
-				<p class="lead">
-					无名小站，始于2020-7-14，记录某大学仔学习历程。
-				</p>
-			</div>
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
 
-			<nav>
-				<ul class="sidebar-nav">
-					<li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
 
-				</ul>
-			</nav>
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
 
-			<p>Copyright (c) 2020, Guanda Wei</p>
-		</div>
-	</aside>
-
-	<main class="content container">
-		<div class="post">
-			<h1>类C语言编译器-语法分析器</h1>
-			<time datetime=2020-12-09T18:05:54&#43;0800 class="post-date">Wed, Dec 9, 2020</time>
-			<p>  语法分析的主要任务就是根据文法，对由词法分析器给出的单词序列进行分析。在本次设计中，采用LR（1）分析方法。由于文法需要转化为状态转移表（即 <em>ACTION - GOTO 表</em>
-				），故本语法分析器大致分为<strong>生成状态转移表</strong>和**语法分析（根据状态转移表进行移进-规约）**两个部分。</p>
-			<p>  最后用Qt做了简单的UI展示，最终效果如下：</p>
-			<p><img src="../../img/compiler_parser/ProgramUI.png" alt="ProgramUI"></p>
-			<hr>
-			<h2 id="生成状态转移表---gettable">生成状态转移表 - GetTable</h2>
-			<p>  自动生成状态转移表模块是根据已知文法，首先求各非终结符的First集，接着求每个项目的闭包，并依次构造LR(1)项目集，根据项目集自动构建ACTION表和GOTO表。</p>
-			<p>  流程图如下：（PS：绘制流程图时对LR(1)分析过程还不够清除，流程中Follow集实际并未用到）
-				<img src="../../img/compiler_parser/getTable_flow.jpg" alt="getTable_flow">
-			</p>
-			<div class="highlight">
-				<pre tabindex="0"
-					style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.h
+    <main class="content container">
+    <div class="post">
+  <h1>类C语言编译器-语法分析器</h1>
+  <time datetime=2020-12-09T18:05:54&#43;0800 class="post-date">Wed, Dec 9, 2020</time>
+  <p>  语法分析的主要任务就是根据文法，对由词法分析器给出的单词序列进行分析。在本次设计中，采用LR（1）分析方法。由于文法需要转化为状态转移表（即 <em>ACTION - GOTO 表</em> ），故本语法分析器大致分为<strong>生成状态转移表</strong>和**语法分析（根据状态转移表进行移进-规约）**两个部分。</p>
+<p>  最后用Qt做了简单的UI展示，最终效果如下：</p>
+<p><img src="../../img/compiler_parser/ProgramUI.png" alt="ProgramUI"></p>
+<hr>
+<h2 id="生成状态转移表---gettable">生成状态转移表 - GetTable</h2>
+<p>  自动生成状态转移表模块是根据已知文法，首先求各非终结符的First集，接着求每个项目的闭包，并依次构造LR(1)项目集，根据项目集自动构建ACTION表和GOTO表。</p>
+<p>  流程图如下：（PS：绘制流程图时对LR(1)分析过程还不够清除，流程中Follow集实际并未用到）
+<img src="../../img/compiler_parser/getTable_flow.jpg" alt="getTable_flow"></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.h
 </span><span style="color:#75715e"></span><span style="color:#75715e">#ifndef MYPARSER_H
 </span><span style="color:#75715e">#define MYPARSER_H
 </span><span style="color:#75715e"></span>
@@ -142,11 +132,7 @@ size_t <span style="color:#a6e22e">hasher</span>(<span style="color:#66d9ef">con
 </span><span style="color:#75715e"></span>};
 
 <span style="color:#75715e">#endif
-</span></code></pre>
-			</div>
-			<div class="highlight">
-				<pre tabindex="0"
-					style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.cpp
+</span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.cpp
 </span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
 </span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;getTable.h&#34;</span><span style="color:#75715e">
 </span><span style="color:#75715e"></span>
@@ -638,18 +624,12 @@ GetTable<span style="color:#f92672">::</span>GetTable()
 </span><span style="color:#75715e">//	goTo.close();
 </span><span style="color:#75715e">//	return 0;
 </span><span style="color:#75715e">//}
-</span></code></pre>
-			</div>
-			<hr>
-			<h2 id="语法分析---parser">语法分析 - Parser</h2>
-			<p>  语法分析部分是一个使用 LR(1)分析方法的类 C 语言分析程序，可以根据已知的类 C 语言文法，由程序自动生成该文法的 ACTION 表和 GOTO 表以进行 LR
-				分析。语法分析器的使用过程中可以根据词法分析器的生成结果正确判断是否是属于本文法的句子，并给出分析过程，最后使用 UI 界面输出相应的语法树。</p>
-			<p>  流程图如下：
-				<img src="../../img/compiler_parser/Parser_flow.jpg" alt="Parser_flow">
-			</p>
-			<div class="highlight">
-				<pre tabindex="0"
-					style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.h
+</span></code></pre></div><hr>
+<h2 id="语法分析---parser">语法分析 - Parser</h2>
+<p>  语法分析部分是一个使用 LR(1)分析方法的类 C 语言分析程序，可以根据已知的类 C 语言文法，由程序自动生成该文法的 ACTION 表和 GOTO 表以进行 LR 分析。语法分析器的使用过程中可以根据词法分析器的生成结果正确判断是否是属于本文法的句子，并给出分析过程，最后使用 UI 界面输出相应的语法树。</p>
+<p>  流程图如下：
+<img src="../../img/compiler_parser/Parser_flow.jpg" alt="Parser_flow"></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.h
 </span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;fstream&gt;</span><span style="color:#75715e">
 </span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;sstream&gt;</span><span style="color:#75715e">
 </span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
@@ -698,11 +678,7 @@ GetTable<span style="color:#f92672">::</span>GetTable()
 </span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">printSpace</span>(std<span style="color:#f92672">::</span>ofstream <span style="color:#f92672">&amp;</span>out, <span style="color:#66d9ef">int</span> num);
     <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">printSyntaxTree</span>(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out);
 };
-</code></pre>
-			</div>
-			<div class="highlight">
-				<pre tabindex="0"
-					style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.cpp
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.cpp
 </span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;Parser.h&#34;</span><span style="color:#75715e">
 </span><span style="color:#75715e"></span>
 <span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>getTable(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outAction, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outGoto) {
@@ -930,21 +906,16 @@ GetTable<span style="color:#f92672">::</span>GetTable()
 </span><span style="color:#75715e">//	parser.close();
 </span><span style="color:#75715e">//	tree.close();
 </span><span style="color:#75715e">//}
-</span></code></pre>
-			</div>
-			<p>参考博客：</p>
-			<p><a
-					href="https://www.cnblogs.com/vachester/p/6884350.html">https://www.cnblogs.com/vachester/p/6884350.html</a>
-			</p>
+</span></code></pre></div><p>参考博客：</p>
+<p><a href="https://www.cnblogs.com/vachester/p/6884350.html">https://www.cnblogs.com/vachester/p/6884350.html</a></p>
 
-		</div>
+</div>
 
 
-	</main>
+    </main>
 
-
-
-
-</body>
-
+    
+      
+    
+  </body>
 </html>

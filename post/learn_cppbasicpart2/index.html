@@ -1,126 +1,105 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
-
 <head>
   <link href="https://gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   <meta name="generator" content="Hugo 0.90.1" />
 
-
+  
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>C&#43;&#43;基础知识[2]——内存管理 &middot; Teza小站</title>
   <meta name="description" content="" />
 
-
+  
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
   <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+  
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+<link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
+  rel="stylesheet">
 
-
-  <link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css"
-    rel="stylesheet">
-
-
+  
   <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
   <link rel="shortcut icon" href="../../favicon.png">
 
-
-
-
-
-  <script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
-  <script>hljs.initHighlightingOnLoad();</script>
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-<body class="theme-base-0c ">
+  <body class="theme-base-0c ">
   <aside class="sidebar">
-    <div class="container sidebar-sticky">
-      <div class="sidebar-about">
-        <a href="https://TezaLeMon.github.io/">
-          <h1>Teza小站</h1>
-        </a>
-        <p class="lead">
-          无名小站，始于2020-7-14，记录某大学仔学习历程。
-        </p>
-      </div>
-
-      <nav>
-        <ul class="sidebar-nav">
-          <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
-
-        </ul>
-      </nav>
-
-      <p>Copyright (c) 2020, Guanda Wei</p>
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
     </div>
-  </aside>
 
-  <main class="content container">
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
     <div class="post">
-      <h1>C&#43;&#43;基础知识[2]——内存管理</h1>
-      <time datetime=2021-03-08T15:35:53&#43;0800 class="post-date">Mon, Mar 8, 2021</time>
-      <h2 id="c-内存管理">C++ 内存管理</h2>
-      <p>  在C++中，内存分成5个区，他们分别是堆、栈、自由存储区、全局/静态存储区和常量存储区。</p>
-      <p>  栈，在执行函数时，函数内局部变量的存储单元都可以在栈上创建，函数执行结束时这些存储单元自动被释放。栈内存分配运算内置于处理器的指令集中，效率很高，但是分配的内存容量有限。</p>
-      <p>  堆，就是那些由new分配的内存块，他们的释放编译器不去管，由我们的应用程序去控制，一般一个new就要对应一个delete。如果程序员没有释放掉，那么在程序结束后，操作系统会自动回收。</p>
-      <p>  自由存储区，就是那些由malloc等分配的内存块，他和堆是十分相似的，不过它是用free来结束自己的生命的。</p>
-      <p>  全局/静态存储区，全局变量和静态变量被分配到同一块内存中，在以前的C语言中，全局变量又分为初始化的和未初始化的，在C++里面没有这个区分了，他们共同占用同一块内存区。</p>
-      <p>  常量存储区，这是一块比较特殊的存储区，他们里面存放的是常量，不允许修改。</p>
-      <p><img src="../../img/Learn_cppBasic/c%E5%8F%AF%E6%89%A7%E8%A1%8C%E6%96%87%E4%BB%B6%E7%BB%93%E6%9E%84.png"
-          alt="c可执行文件结构"><br>
-        <img src="../../img/Learn_cppBasic/c%E5%86%85%E5%AD%98%E5%9B%BE%E5%83%8F.png" alt="c内存图像">
-      </p>
-      <hr>
-      <p>  堆和栈主要的区别由以下几点：</p>
-      <p>  管理方式：对于栈来讲，是由编译器自动管理，无需我们手工控制；对于堆来说，释放工作由程序员控制，容易产生memory leak。</p>
-      <p>  空间大小：一般来讲在32位系统下，堆内存可以达到4G的空间，从这个角度来看堆内存几乎是没有什么限制的。但是对于栈来讲，一般都是有一定的空间大小的，例如，在VC6下面，默认的栈空间大小是1M。</p>
-      <p>  碎片问题：对于堆来讲，频繁的 <em>new/delete</em> 势必会造成内存空间的不连续，从而造成大量的碎片，使程序效率降低。对于栈来讲，则不会存在这个问题。</p>
-      <p>  生长方向：对于堆来讲，生长方向是向上的，也就是向着内存地址增加的方向；对于栈来讲，它的生长方向是向下的，是向着内存地址减小的方向增长。</p>
-      <p>  分配方式：堆都是动态分配的，没有静态分配的堆。栈有2种分配方式：静态分配和动态分配。静态分配是编译器完成的，比如局部变量的分配。动态分配由 <em>alloca</em>
-        函数进行分配，但是栈的动态分配和堆是不同的，他的动态分配是由编译器进行释放，无需我们手工实现。</p>
-      <p>
-          分配效率：栈是机器系统提供的数据结构，计算机会在底层对栈提供支持：分配专门的寄存器存放栈的地址，压栈出栈都有专门的指令执行，这就决定了栈的效率比较高。堆则是C/C++函数库提供的，它的机制是很复杂的，例如为了分配一块内存，库函数会按照一定的算法（具体的算法可以参考数据结构/操作系统）在堆内存中搜索可用的足够大小的空间，如果没有足够大小的空间（可能是由于内存碎片太多），就有可能调用系统功能去增加程序数据段的内存空间，这样就有机会分到足够大小的内存，然后进行返回。显然，堆的效率比栈要低得多。
-      </p>
-      <p>  从这里我们可以看到，堆和栈相比，由于大量 <em>new/delete</em>
-        的使用，容易造成大量的内存碎片；由于没有专门的系统支持，效率很低；由于可能引发用户态和核心态的切换，内存的申请，代价变得更加昂贵。所以栈在程序中是应用最广泛的，就算是函数的调用也利用栈去完成，函数调用过程中的参数，返回地址，EBP和局部变量都采用栈的方式存放。
-      </p>
-      <h3 id="newmalloc-区别"><em>new/malloc</em> 区别</h3>
-      <p>  <em>new</em> 操作符从自由存储区（free store）上为对象动态分配内存空间，而 <em>malloc</em> 函数从堆上动态分配内存。自由存储区是C++基于 <em>new</em>
-        操作符的一个抽象概念，凡是通过 <em>new</em> 操作符进行内存申请，该内存即为自由存储区。而堆是操作系统中的术语，是操作系统所维护的一块特殊内存，用于程序的内存动态分配，C语言使用 <em>malloc</em>
-        从堆上分配内存，使用 <em>free</em> 释放已分配的对应内存。那么自由存储区是否能够是堆（问题等价于 <em>new</em> 是否能在堆上动态分配内存），这取决于 <em>operator new</em>
-        的实现细节。自由存储区不仅可以是堆，还可以是静态存储区，这都看 <em>operator new</em> 在哪里为对象分配内存。</p>
-      <h3 id="如何定义一个只能在堆上栈上生成对象的类">如何定义一个只能在堆上（栈上）生成对象的类？</h3>
-      <h4 id="只能在堆上">只能在堆上</h4>
-      <p>  方法：将析构函数设置为私有</p>
-      <p>  原因：C++ 是静态绑定语言，编译器管理栈上对象的生命周期，编译器在为类对象分配栈空间时，会先检查类的析构函数的访问性。若析构函数不可访问，则不能在栈上创建对象。</p>
-      <h4 id="只能在栈上">只能在栈上</h4>
-      <p>  方法：将 <em>new</em> 和 <em>delete</em> 重载为私有</p>
-      <p>  原因：在堆上生成对象，使用 <em>new</em> 关键词操作，其过程分为两阶段：第一阶段，使用 <em>new</em> 在堆上寻找可用内存，分配给对象；第二阶段，调用构造函数生成对象。将 <em>new</em>
-        操作设置为私有，那么第一阶段就无法完成，就不能够在堆上生成对象。</p>
-      <hr>
-      <h2 id="垃圾回收">垃圾回收</h2>
-      <p>  垃圾回收的算法的基础通常基于扫描并标记当前可能被使用的所有内存块，从已经被分配的所有内存中把未标记的内存回收来做的。C/C++
-        中无法实现垃圾回收的观点通常基于无法正确扫描出所有可能还会被使用的内存块，但是，看似不可能的事情实际上实现起来却并不复杂。首先，通过扫描内存的数据，指向堆上动态分配出来内存的指针是很容易被识别出来的，如果有识别错误，也只能是把一些不是指针的数据当成指针，而不会把指针当成非指针数据。这样，回收垃圾的过程只会漏回收掉而不会错误的把不应该回收的内存清理。其次，如果回溯所有内存块被引用的根，只可能存在于全局变量和当前的栈内，而全局变量（包括函数内的静态变量）都是集中存在于
-        BSS 段或 data 段中。</p>
-      <p>  垃圾回收的时候，只需要扫描 BSS 段，data 段以及当前被使用着的栈空间，找到可能是动态内存指针的量，把引用到的内存递归扫描就可以得到当前正在使用的所有动态内存了。</p>
-      <p>参考资料：</p>
-      <p>《C++ Primer 中文版 第5版》<br>
-        <a href="https://blog.csdn.net/caogenwangbaoqiang/article/details/79788368">C++内存管理</a><br>
-        <a href="https://blog.csdn.net/weixin_42743471/article/details/85250848">浅谈c++内存管理</a><br>
-        <a href="https://www.nowcoder.com/questionTerminal/0a584aa13f804f3ea72b442a065a7618">如何定义一个只能在堆上（栈上）生成对象的类?</a>
-      </p>
+  <h1>C&#43;&#43;基础知识[2]——内存管理</h1>
+  <time datetime=2021-03-08T15:35:53&#43;0800 class="post-date">Mon, Mar 8, 2021</time>
+  <h2 id="c-内存管理">C++ 内存管理</h2>
+<p>  在C++中，内存分成5个区，他们分别是堆、栈、自由存储区、全局/静态存储区和常量存储区。</p>
+<p>  栈，在执行函数时，函数内局部变量的存储单元都可以在栈上创建，函数执行结束时这些存储单元自动被释放。栈内存分配运算内置于处理器的指令集中，效率很高，但是分配的内存容量有限。</p>
+<p>  堆，就是那些由new分配的内存块，他们的释放编译器不去管，由我们的应用程序去控制，一般一个new就要对应一个delete。如果程序员没有释放掉，那么在程序结束后，操作系统会自动回收。</p>
+<p>  自由存储区，就是那些由malloc等分配的内存块，他和堆是十分相似的，不过它是用free来结束自己的生命的。</p>
+<p>  全局/静态存储区，全局变量和静态变量被分配到同一块内存中，在以前的C语言中，全局变量又分为初始化的和未初始化的，在C++里面没有这个区分了，他们共同占用同一块内存区。</p>
+<p>  常量存储区，这是一块比较特殊的存储区，他们里面存放的是常量，不允许修改。</p>
+<p><img src="../../img/Learn_cppBasic/c%E5%8F%AF%E6%89%A7%E8%A1%8C%E6%96%87%E4%BB%B6%E7%BB%93%E6%9E%84.png" alt="c可执行文件结构"><br>
+<img src="../../img/Learn_cppBasic/c%E5%86%85%E5%AD%98%E5%9B%BE%E5%83%8F.png" alt="c内存图像"></p>
+<hr>
+<p>  堆和栈主要的区别由以下几点：</p>
+<p>  管理方式：对于栈来讲，是由编译器自动管理，无需我们手工控制；对于堆来说，释放工作由程序员控制，容易产生memory leak。</p>
+<p>  空间大小：一般来讲在32位系统下，堆内存可以达到4G的空间，从这个角度来看堆内存几乎是没有什么限制的。但是对于栈来讲，一般都是有一定的空间大小的，例如，在VC6下面，默认的栈空间大小是1M。</p>
+<p>  碎片问题：对于堆来讲，频繁的 <em>new/delete</em> 势必会造成内存空间的不连续，从而造成大量的碎片，使程序效率降低。对于栈来讲，则不会存在这个问题。</p>
+<p>  生长方向：对于堆来讲，生长方向是向上的，也就是向着内存地址增加的方向；对于栈来讲，它的生长方向是向下的，是向着内存地址减小的方向增长。</p>
+<p>  分配方式：堆都是动态分配的，没有静态分配的堆。栈有2种分配方式：静态分配和动态分配。静态分配是编译器完成的，比如局部变量的分配。动态分配由 <em>alloca</em> 函数进行分配，但是栈的动态分配和堆是不同的，他的动态分配是由编译器进行释放，无需我们手工实现。</p>
+<p>  分配效率：栈是机器系统提供的数据结构，计算机会在底层对栈提供支持：分配专门的寄存器存放栈的地址，压栈出栈都有专门的指令执行，这就决定了栈的效率比较高。堆则是C/C++函数库提供的，它的机制是很复杂的，例如为了分配一块内存，库函数会按照一定的算法（具体的算法可以参考数据结构/操作系统）在堆内存中搜索可用的足够大小的空间，如果没有足够大小的空间（可能是由于内存碎片太多），就有可能调用系统功能去增加程序数据段的内存空间，这样就有机会分到足够大小的内存，然后进行返回。显然，堆的效率比栈要低得多。</p>
+<p>  从这里我们可以看到，堆和栈相比，由于大量 <em>new/delete</em> 的使用，容易造成大量的内存碎片；由于没有专门的系统支持，效率很低；由于可能引发用户态和核心态的切换，内存的申请，代价变得更加昂贵。所以栈在程序中是应用最广泛的，就算是函数的调用也利用栈去完成，函数调用过程中的参数，返回地址，EBP和局部变量都采用栈的方式存放。</p>
+<h3 id="newmalloc-区别"><em>new/malloc</em> 区别</h3>
+<p>  <em>new</em> 操作符从自由存储区（free store）上为对象动态分配内存空间，而 <em>malloc</em> 函数从堆上动态分配内存。自由存储区是C++基于 <em>new</em> 操作符的一个抽象概念，凡是通过 <em>new</em> 操作符进行内存申请，该内存即为自由存储区。而堆是操作系统中的术语，是操作系统所维护的一块特殊内存，用于程序的内存动态分配，C语言使用 <em>malloc</em> 从堆上分配内存，使用 <em>free</em> 释放已分配的对应内存。那么自由存储区是否能够是堆（问题等价于 <em>new</em> 是否能在堆上动态分配内存），这取决于 <em>operator new</em> 的实现细节。自由存储区不仅可以是堆，还可以是静态存储区，这都看 <em>operator new</em> 在哪里为对象分配内存。</p>
+<h3 id="如何定义一个只能在堆上栈上生成对象的类">如何定义一个只能在堆上（栈上）生成对象的类？</h3>
+<h4 id="只能在堆上">只能在堆上</h4>
+<p>  方法：将析构函数设置为私有</p>
+<p>  原因：C++ 是静态绑定语言，编译器管理栈上对象的生命周期，编译器在为类对象分配栈空间时，会先检查类的析构函数的访问性。若析构函数不可访问，则不能在栈上创建对象。</p>
+<h4 id="只能在栈上">只能在栈上</h4>
+<p>  方法：将 <em>new</em> 和 <em>delete</em> 重载为私有</p>
+<p>  原因：在堆上生成对象，使用 <em>new</em> 关键词操作，其过程分为两阶段：第一阶段，使用 <em>new</em> 在堆上寻找可用内存，分配给对象；第二阶段，调用构造函数生成对象。将 <em>new</em> 操作设置为私有，那么第一阶段就无法完成，就不能够在堆上生成对象。</p>
+<hr>
+<h2 id="垃圾回收">垃圾回收</h2>
+<p>  垃圾回收的算法的基础通常基于扫描并标记当前可能被使用的所有内存块，从已经被分配的所有内存中把未标记的内存回收来做的。C/C++ 中无法实现垃圾回收的观点通常基于无法正确扫描出所有可能还会被使用的内存块，但是，看似不可能的事情实际上实现起来却并不复杂。首先，通过扫描内存的数据，指向堆上动态分配出来内存的指针是很容易被识别出来的，如果有识别错误，也只能是把一些不是指针的数据当成指针，而不会把指针当成非指针数据。这样，回收垃圾的过程只会漏回收掉而不会错误的把不应该回收的内存清理。其次，如果回溯所有内存块被引用的根，只可能存在于全局变量和当前的栈内，而全局变量（包括函数内的静态变量）都是集中存在于 BSS 段或 data 段中。</p>
+<p>  垃圾回收的时候，只需要扫描 BSS 段，data 段以及当前被使用着的栈空间，找到可能是动态内存指针的量，把引用到的内存递归扫描就可以得到当前正在使用的所有动态内存了。</p>
+<p>参考资料：</p>
+<p>《C++ Primer 中文版 第5版》<br>
+<a href="https://blog.csdn.net/caogenwangbaoqiang/article/details/79788368">C++内存管理</a><br>
+<a href="https://blog.csdn.net/weixin_42743471/article/details/85250848">浅谈c++内存管理</a><br>
+<a href="https://www.nowcoder.com/questionTerminal/0a584aa13f804f3ea72b442a065a7618">如何定义一个只能在堆上（栈上）生成对象的类?</a></p>
 
-    </div>
+</div>
 
 
-  </main>
+    </main>
 
-
-
-
-</body>
-
+    
+      
+    
+  </body>
 </html>
