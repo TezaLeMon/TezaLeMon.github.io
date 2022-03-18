@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Hugo主题定制 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Hugo主题定制</h1>
+  <time datetime=2020-07-14T15:50:48&#43;0800 class="post-date">Tue, Jul 14, 2020</time>
+  <p>  <em>Hugo</em>主题繁多，使用主题模板必然会有一些地方是需要修改的，以本站主题<em>Hyde</em>为例，记录一下本渣定制主题的过程。</p>
+<hr>
+<h3 id="主题颜色">主题颜色</h3>
+<p><img src="../../img/hyde-customize/eight%20themes.png" alt="八种主题颜色"></p>
+<p>  根据官方文档，要改变主题颜色，只需要在根目录 <em><strong>config.toml</strong></em> 中的 <strong>params</strong> 下增加 <strong>themeColor</strong> 属性即可。
+  例如我想使用青色 0c 主题：</p>
+<pre tabindex="0"><code>[params]
+  themeColor = &quot;theme-base-0c&quot;
+</code></pre><hr>
+<h3 id="页面描述">页面描述</h3>
+<p><img src="../../img/hyde-customize/sidebar.png" alt="sidebar"></p>
+<p>  很显然，<em>sidebar</em>中红框内的内容是我们希望更改的。</p>
+<p>  查看根部录 <strong>layouts</strong> 下的文件，简单阅读就能找到更改页面内容的途径。</p>
+<p>  在 <strong>sidebar.html</strong> 中</p>
+<pre tabindex="0"><code>&lt;div class=&quot;sidebar-about&quot;&gt;
+    &lt;a href=&quot;{{ .Site.BaseURL }}&quot;&gt;&lt;h1&gt;{{ .Site.Title }}&lt;/h1&gt;&lt;/a&gt;
+    &lt;p class=&quot;lead&quot;&gt;
+    {{ with .Site.Params.description }} {{.}} {{ else }}An elegant open source and mobile first theme for &lt;a href=&quot;http://hugo.spf13.com&quot;&gt;hugo&lt;/a&gt; made by &lt;a href=&quot;http://twitter.com/mdo&quot;&gt;@mdo&lt;/a&gt;. Originally made for Jekyll.{{end}}
+    &lt;/p&gt;
+&lt;/div&gt;
+</code></pre><p>  显然其中的Title、description（以及贴上代码段中没有的copyright等）就是我们希望更改的内容。</p>
+<p>  同样，在根目录 <em><strong>config.toml</strong></em> 中的 <strong>params</strong> 下增加相关属性即可。
+  例如：</p>
+<pre tabindex="0"><code>title = &quot;Teza小站&quot;
+
+[params]
+  description = &quot;无名小站，始于2020-7-14，记录某大学仔学习历程。&quot;
+  copyright = &quot;Copyright (c) 2020, Guanda Wei&quot;
+</code></pre><hr>
+<h3 id="首页博客列表描述">首页博客列表描述</h3>
+<p>  博客列表默认显示文章的所有内容，当文章内容过长时看上去就很不舒服，而且会直接输出.md文件的源码内容，就像这样 ↓</p>
+<p><img src="../../img/hyde-customize/content.png" alt="content"></p>
+<p>  查看 <em><strong>index.html</strong></em> ，可以看到控制这段文字输出的是以下部分</p>
+<pre tabindex="0"><code>  {{ .Summary }}
+</code></pre><p>  于是在.md头部补上Summary（这一点其实并不算是定制主题的一部分，只是自己在写博客时发现的一点小问题，所以一并写上）</p>
+<pre tabindex="0"><code>Summary: &quot;Hugo主题繁多，使用主题模板必然会有一些地方是需要修改的，以本站主题Hyde为例，记录本渣定制主题的过程。&quot;
+</code></pre><p>  效果如下 👇</p>
+<p><img src="../../img/hyde-customize/summary.png" alt="summary"></p>
+<p>  另外时间的格式时偏向西方，我个人而言肯定还是习惯于阅读年-月-日这样格式的时间。继续修改 <em><strong>index.html</strong></em> 中的内容：</p>
+<pre tabindex="0"><code>{{ .Date.Format &quot;2006-1-2&quot; }}
+</code></pre><p>  效果如下 👇</p>
+<p><img src="../../img/hyde-customize/time.png" alt="time"></p>
+<h3 id="代码高亮">代码高亮</h3>
+<p>  作为秃头计算机生，代码没有高亮显然是不能忍的。</p>
+<p><img src="../../img/hyde-customize/codenohighlight.png" alt="codenohighlight"></p>
+<p>  网上查阅资料权衡后，选择 <a href="http://highlightjs.org/"><strong>HighLight.js</strong></a> 来作为小站代码高亮工具。</p>
+<p>  在 <em><strong>head_fonts.html</strong></em> 中引入 css，在 <em><strong>hook_head_end.html</strong></em> 中引入 js，实现代码高亮效果。</p>
+<pre tabindex="0"><code>head_fonts.html:
+
+  &lt;!-- 代码高亮 --&gt;
+  &lt;link href=&quot;https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark-reasonable.min.css&quot; rel=&quot;stylesheet&quot;&gt;
+</code></pre><pre tabindex="0"><code>hook_head_end.html:
+
+  &lt;!-- 代码高亮 --&gt;
+  &lt;script src=&quot;https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js&quot;&gt;&lt;/script&gt;
+  &lt;script&gt;hljs.initHighlightingOnLoad();&lt;/script&gt;
+</code></pre><p>  至此，基本定制工作完成！~ 😏</p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Java并发编程学习笔记-01 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Java并发编程学习笔记-01</h1>
+  <time datetime=2021-09-15T23:01:20&#43;0800 class="post-date">Wed, Sep 15, 2021</time>
+  <p>本文为学习 Java 并发编程的一些随笔 <em>Part 1</em>，记录我所认为的一些重要 or 有趣的点。</p>
+<p>此部分主要是关于同步、线程安全等一些理论和技术的探讨。</p>
+<p>参考书籍：<em>Java Concurrency in Practice</em> 《Java并发编程实战》</p>
+<h1 id="线程安全性">线程安全性</h1>
+<h2 id="原子性">原子性</h2>
+<h3 id="竞态条件">竞态条件</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@NotThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">UnsafeCountingFactorizer</span> <span style="color:#66d9ef">implements</span> Servlet <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">long</span> count <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">long</span> <span style="color:#a6e22e">getCount</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span> <span style="color:#66d9ef">return</span> count<span style="color:#f92672">;</span> <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">service</span><span style="color:#f92672">(</span>ServletRequest req<span style="color:#f92672">,</span> ServletResponse resp<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        BigInteger i <span style="color:#f92672">=</span> extractFromRequest<span style="color:#f92672">(</span>req<span style="color:#f92672">);</span>
+        BigInteger<span style="color:#f92672">[]</span> factors <span style="color:#f92672">=</span> factor<span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+        <span style="color:#f92672">++</span>count<span style="color:#f92672">;</span>
+        encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> factors<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>在上面的代码段里，虽然 <em>++count</em> 是一种紧凑的语法，但这个操作并不是原子性的，包括：读取 <em>count</em> 的值、将值加1、然后将计算结果写回 <em>count</em>。这是一个“读取—修改—写入”的操作序列，并且其结果状态依赖于之前的状态。</p>
+<p>在并发编程中，这种由于<strong>不恰当的执行时序</strong>而出现不正确的结果是一种非常重要的情况，也叫做<strong>竞态条件</strong>（<em><strong>Race Condition</strong></em>）。</p>
+<h3 id="复合操作">复合操作</h3>
+<p>要避免竞态条件问题，就必须在某个线程修改该变量时，通过某种方式防止其他线程使用这个变量，从而确保其他线程只能在修改操作完成之前或之后读取和修改状态，而不是在修改状态的过程中。</p>
+<p>在Java中，可以使用一个现有的线程安全类来修复这个问题：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CountingFactorizer</span> <span style="color:#66d9ef">implements</span> Servlet <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> AtomicLong count <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> AtomicLong<span style="color:#f92672">(</span>0<span style="color:#f92672">);</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">long</span> <span style="color:#a6e22e">getCount</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span> <span style="color:#66d9ef">return</span> count<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span> <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">service</span><span style="color:#f92672">(</span>ServletRequest req<span style="color:#f92672">,</span> ServletResponse resp<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        BigInteger i <span style="color:#f92672">=</span> extractFromRequest<span style="color:#f92672">(</span>req<span style="color:#f92672">);</span>
+        BigInteger<span style="color:#f92672">[]</span> factors <span style="color:#f92672">=</span> factor<span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+        count<span style="color:#f92672">.</span><span style="color:#a6e22e">incrementAndGet</span><span style="color:#f92672">();</span>
+        encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> factors<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="加锁机制">加锁机制</h3>
+<p>如果在 <em>Servlet</em> 中添加更多的状态，那么是否只需添加更多的线程安全变量就足够了？</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@NotThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">UnsafeCachingFactorizer</span> <span style="color:#66d9ef">implements</span> Servlet <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">&gt;</span> lastNumber <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">&gt;();</span>
+
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">[]&gt;</span> lastFactors <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">[]&gt;();</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">service</span><span style="color:#f92672">(</span>ServletRequest req<span style="color:#f92672">,</span> ServletResponse resp<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        BigInteger i <span style="color:#f92672">=</span> extractFromRequest<span style="color:#f92672">(</span>req<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span><span style="color:#f92672">(</span>i<span style="color:#f92672">.</span><span style="color:#a6e22e">equals</span><span style="color:#f92672">(</span>lastNumber<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">())){</span>
+            encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> lastFactors<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">());</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">else</span> <span style="color:#f92672">{</span>
+            BigInteger<span style="color:#f92672">[]</span> factors <span style="color:#f92672">=</span> factor<span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+            lastNumber<span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+            lastFactors<span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>factors<span style="color:#f92672">);</span>
+            encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> factors<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>然而，这种方法并不正确。尽管这些原子引用本身是线程安全的，但在这段代码中存在着竞态条件。</p>
+<h4 id="内置锁">内置锁</h4>
+<p>Java提供了一种内置的锁机制来支持原子性：同步代码块（<em>Synchronized Block</em>）。</p>
+<p>以 <em><strong>synchronized</strong></em> 关键字修饰的方法就是一个横跨整个方法体的同步代码块。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">SynchronizedCachingFactorizer</span> <span style="color:#66d9ef">implements</span> Servlet <span style="color:#f92672">{</span>
+   <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">&gt;</span> lastNumber <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">&gt;();</span>
+
+   <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">[]&gt;</span> lastFactors <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> AtomicReference<span style="color:#f92672">&lt;</span>BigInteger<span style="color:#f92672">[]&gt;();</span>
+
+   <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">service</span><span style="color:#f92672">(</span>ServletRequest req<span style="color:#f92672">,</span> ServletResponse resp<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+       BigInteger i <span style="color:#f92672">=</span> extractFromRequest<span style="color:#f92672">(</span>req<span style="color:#f92672">);</span>
+       <span style="color:#66d9ef">if</span><span style="color:#f92672">(</span>i<span style="color:#f92672">.</span><span style="color:#a6e22e">equals</span><span style="color:#f92672">(</span>lastNumber<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">())){</span>
+           encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> lastFactors<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">());</span>
+       <span style="color:#f92672">}</span>
+       <span style="color:#66d9ef">else</span> <span style="color:#f92672">{</span>
+           BigInteger<span style="color:#f92672">[]</span> factors <span style="color:#f92672">=</span> factor<span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+           lastNumber<span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+           lastFactors<span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>factors<span style="color:#f92672">);</span>
+           encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> factors<span style="color:#f92672">);</span>
+       <span style="color:#f92672">}</span>
+   <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>然而，这种方式过于极端，多个客户端无法同时使用因数分解 Servlet，服务的响应性非常低。这就变成了一个性能问题。</p>
+<h4 id="重入">重入</h4>
+<p>当某个线程请求一个由其他线程持有的锁时，发出的请求就会阻塞。然而，由于内置锁是可重入的，因此如果某个线程试图获得一个由它持有的锁，那么这个请求就会成功，“重入”意味着获取锁的操作的粒度是“线程”，而不是“调用”（<strong>这与 <em>POXIS</em> 线程（<em>pthread</em>）互斥体的默认加锁行为不同</strong>）</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Widget</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">doSomeThing</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#75715e">// ...
+</span><span style="color:#75715e"></span>    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">LoggingWidget</span> <span style="color:#66d9ef">extends</span> Widget <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">doSomeThing</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#75715e">// ...
+</span><span style="color:#75715e"></span>        System<span style="color:#f92672">.</span><span style="color:#a6e22e">out</span><span style="color:#f92672">.</span><span style="color:#a6e22e">println</span><span style="color:#f92672">(</span>toString<span style="color:#f92672">()</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;: calling doSomeThing&#34;</span><span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">super</span><span style="color:#f92672">.</span><span style="color:#a6e22e">doSomeThing</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>在上面这段代码中，如果没有可重入的锁，那么就会产生死锁。</p>
+<h3 id="活跃性与性能">活跃性与性能</h3>
+<p>在 <em>SynchronizedCachingFactorizer</em> 中，同步方式是对整个 <em>service</em> 方法进行同步。这种简单且粗粒度的方法能确保线程安全性，但付出的代价却很高。这个 <em>service</em> 方法每次只有一个线程能执行，背离了 Servlet 框架的初衷。</p>
+<p>可以将代码修改为使用独立的同步代码块。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CachingFactorizer</span> <span style="color:#66d9ef">implements</span> Servlet <span style="color:#f92672">{</span>
+   <span style="color:#66d9ef">private</span> BigInteger lastNumber<span style="color:#f92672">;</span>
+
+   <span style="color:#66d9ef">private</span> BigInteger<span style="color:#f92672">[]</span> lastFactors<span style="color:#f92672">;</span>
+
+   <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">service</span><span style="color:#f92672">(</span>ServletRequest req<span style="color:#f92672">,</span> ServletResponse resp<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+       BigInteger i <span style="color:#f92672">=</span> extractFromRequest<span style="color:#f92672">(</span>req<span style="color:#f92672">);</span>
+       BigInteger<span style="color:#f92672">[]</span> factors <span style="color:#f92672">=</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">;</span>
+
+       <span style="color:#66d9ef">synchronized</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">this</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+           <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>i<span style="color:#f92672">.</span><span style="color:#a6e22e">equals</span><span style="color:#f92672">(</span>lastNumber<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+               <span style="color:#f92672">++</span>cacheHits<span style="color:#f92672">;</span>
+               factors <span style="color:#f92672">=</span> lastFactors<span style="color:#f92672">.</span><span style="color:#a6e22e">clone</span><span style="color:#f92672">();</span>
+           <span style="color:#f92672">}</span>
+       <span style="color:#f92672">}</span>
+
+       <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>factors <span style="color:#f92672">==</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+           factors <span style="color:#f92672">=</span> factor<span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+           <span style="color:#66d9ef">synchronized</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">this</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+               lastNumber <span style="color:#f92672">=</span> i<span style="color:#f92672">;</span>
+               lastFactors <span style="color:#f92672">=</span> factors<span style="color:#f92672">.</span><span style="color:#a6e22e">clone</span><span style="color:#f92672">();</span>
+           <span style="color:#f92672">}</span>
+       <span style="color:#f92672">}</span>
+
+       encodeIntoResponse<span style="color:#f92672">(</span>resp<span style="color:#f92672">,</span> factors<span style="color:#f92672">);</span>
+   <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>重构后的 <em>CachingFactorizer</em> 实现了在简单性和并发性之间的平衡。要判断同步代码块的合理大小，需要在各种设计需求之间进行权衡，包括安全性、简单性和性能。</p>
+<h1 id="对象的共享">对象的共享</h1>
+<h2 id="可见性">可见性</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">NoVisibility</span> <span style="color:#f92672">{</span>
+  	<span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">boolean</span> ready<span style="color:#f92672">;</span>
+  	<span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">int</span> number<span style="color:#f92672">;</span>
+  
+  	<span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ReaderThread</span> <span style="color:#66d9ef">extends</span> Thread <span style="color:#f92672">{</span>
+      	<span style="color:#a6e22e">@Override</span>
+      	<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+          	<span style="color:#66d9ef">while</span> <span style="color:#f92672">(!</span>ready<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+              	Thread<span style="color:#f92672">.</span><span style="color:#a6e22e">yield</span><span style="color:#f92672">();</span>
+              	System<span style="color:#f92672">.</span><span style="color:#a6e22e">out</span><span style="color:#f92672">.</span><span style="color:#a6e22e">println</span><span style="color:#f92672">(</span>number<span style="color:#f92672">);</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+  
+  	<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">main</span><span style="color:#f92672">(</span>String<span style="color:#f92672">[]</span> args<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+      	<span style="color:#66d9ef">new</span> ReaderThread<span style="color:#f92672">().</span><span style="color:#a6e22e">start</span><span style="color:#f92672">();</span>
+      	number <span style="color:#f92672">=</span> 42<span style="color:#f92672">;</span>
+      	ready <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span><span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>在上面这段代码中，虽然看起来会输出42，但事实很有可能输出0，或者根本无法终止。因为代码中根本没有使用足够的同步机制，无法保证主线程写入的 <em>ready</em> 值和 <em>number</em> 值对于读线程来说是可见的。</p>
+<p>这种现象被称作“重排序（<em>Reordering</em>）”。在没有同步的情况下，编译器、处理器以及运行时等都可能对操作的执行顺序进行调整（这种设计有利于JVM利用现代多核处理器的性能）。</p>
+<h3 id="非原子的64位操作">非原子的64位操作</h3>
+<p>对于非 <em><strong>volatile</strong></em> 类型的 <em>long</em> 和 <em>double</em> 变量，JVM允许将64位的操作分解为两个32位的操作。当读取非 <em><strong>volatile</strong></em> 类型的 <em>long</em> 和 <em>double</em> 变量时，如果对该变量的读操作和写操作在不同的线程中执行，那么很可能会读取到某个值的高32位和另一个值的低32位。因此即使不考虑数据失效的问题，多线程中使用共享且可变的 <em>long</em> 和 <em>double</em> 变量也是不安全的。</p>
+<h3 id="volatile-变量">volatile 变量</h3>
+<p>当把变量声明为 <em><strong>volatile</strong></em> 类型，编译和运行时都会注意到这个变量是共享的，因此不会将该变量上的操作与其他内存操作一起重排序。<em><strong>volatile</strong></em> 变量不会被缓存在寄存器或者其他处理器不可见的地方。</p>
+<p><em><strong>volatile</strong></em> 是一种比 <em><strong>synchronized</strong></em> 更轻量级的同步机制。<em><strong>volatile</strong></em> 通常用作某个操作完成、发生或状态的标志。需要注意 <em><strong>volatile</strong></em> 的语义不足以确保递增操作 <em>count++</em> 的原子性。</p>
+<p>PS：仅当 <em><strong>volatile</strong></em> 能简化代码的实现以及对同步策略的验证时，才应该使用。</p>
+<h2 id="发布与逸出">发布与逸出</h2>
+<p>发布（<em>Publish</em>）一个对象的意思是指，使对象能够在当前作用域之外的代码中使用。在许多情况下，我们需要确保对象以及内部状态不被发布；而在某些情况下，我们又需要发布某个对象，并且如果在发布时要确保线程安全性，则可能需要同步。</p>
+<p>发布内部状态可能会破坏封装性，并使得程序难以维持不变性条件。当某个不应该发布的对象被发布时，这种情况就被称作逸出（<em>Escape</em>）。如下面代码段所示：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">UnsafeStates</span> <span style="color:#f92672">{</span>
+  	<span style="color:#66d9ef">private</span> String<span style="color:#f92672">[]</span> states <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> String<span style="color:#f92672">[]</span> <span style="color:#f92672">{</span>
+      	<span style="color:#e6db74">&#34;Success&#34;</span><span style="color:#f92672">,</span> <span style="color:#e6db74">&#34;Error&#34;</span><span style="color:#f92672">,</span> <span style="color:#e6db74">&#34;Fail&#34;</span>
+    <span style="color:#f92672">};</span>
+  	<span style="color:#66d9ef">public</span> String<span style="color:#f92672">[]</span> <span style="color:#a6e22e">getStates</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+      	<span style="color:#66d9ef">return</span> states<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>数组 <em>status</em> 已经逸出了它所在的作用域，这本应是个私有的变量。我们无法知道其他线程会对已发布的引用执行什么操作，误用该引用的风险是中存在。当某个对象逸出后，我们必须假设有某个类或线程可能会误用该对象。这正是需要使用封装的最主要原因：封装能够使得对程序的正确性进行分析变得可能，并使得无意中破坏设计约束条件变得更难。</p>
+<h2 id="线程封闭">线程封闭</h2>
+<p>当访问共享的可变数据时，通常需要使用同步。一种避免使用同步的方式就是不共享数据。如果仅在单线程内访问数据，就不需要同步。这种技术被称作线程封闭（<em>Thread Confinement</em>）。当某个对象封闭在一个线程中时，这种用法将自动实现线程安全性，技术被封闭的对象本身不是线程安全的。</p>
+<h3 id="ad-hoc-线程封闭">Ad-hoc 线程封闭</h3>
+<p>Ad-hoc 线程封闭是指，维护线程封闭性的职责完全由程序实现来承担。</p>
+<h3 id="栈封闭">栈封闭</h3>
+<p>栈封闭是线程封闭的一种特例，在栈封闭中，只能通过局部变量才能访问对象。</p>
+<h3 id="threadlocal-类">ThreadLocal 类</h3>
+<p>这个类能使线程中某个值与保存值的对象关联起来。<em><strong>ThreadLocal</strong></em> 提供了 <em>get</em> 与 <em>set</em> 等访问接口或方法，这些方法为<strong>每个使用该变量的线程都存有一份独立的副本</strong>，因此 <em>get</em> 总是返回由当前执行线程在调用 <em>set</em> 时设置的最新值。</p>
+<p><em>ThreadLocal</em> 对象通常用于防止对可变的单实例变量（<em>Singleton</em>）或全局变量进行共享。</p>
+<p>例如，<em>JDBC</em> 的连接对象不一定是线程安全的，因此当多线程程序中在没有协同的情况下使用全局变量时就不是线程安全的。通过将 <em>JDBC</em> 保存到 <em>ThreadLocal</em> 对象中，每个线程都会拥有属于自己的连接，如下所示。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> ThreadLocal<span style="color:#f92672">&lt;</span>Connection<span style="color:#f92672">&gt;</span> connectionHolder
+    <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ThreadLocal<span style="color:#f92672">&lt;</span>Connection<span style="color:#f92672">&gt;()</span> <span style="color:#f92672">{</span>
+    	<span style="color:#66d9ef">public</span> Connection <span style="color:#a6e22e">initialValue</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">return</span> DriverManager<span style="color:#f92672">.</span><span style="color:#a6e22e">getConnetion</span><span style="color:#f92672">(</span>DB_URL<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+	<span style="color:#f92672">};</span>
+
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> Connection <span style="color:#a6e22e">getConnection</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">return</span> connetionHolder<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h2 id="不变性">不变性</h2>
+<p>如果某个对象在被创建后其状态就不能被修改，那么这个对象就成为不可变对象。<strong>不可变对象一定是线程安全的</strong>。</p>
+<p>当满足以下条件时，对象才是不可变的：</p>
+<ul>
+<li>对象创建后其状态就不能修改</li>
+<li>对象的所有域都是 <em>final</em> 类型</li>
+<li>对象是正确创建的（在创建期间，<em>this</em> 引用没有逸出）</li>
+</ul>
+<h2 id="安全发布">安全发布</h2>
+<p>可变对象必须通过安全的方式来发布，这通常意味着在发布和使用该对象的线程时都必须使用同步。</p>
+<p>要安全地发布一个对象，对象的引用以及对象的状态必须同时对其他线程可见。一个正确构造的对象可以通过以下方式来安全地发布：</p>
+<ul>
+<li>在静态初始化函数中初始化一个对象引用</li>
+<li>将对象的引用保存到 <em>volatile</em> 类型的域或者 <em>AtomicReferance</em> 对象中</li>
+<li>将对象的引用保存到某个正确构造对象的 <em>final</em> 类型域中</li>
+<li>将对象的引用保存到一个由锁保护的域中（例如某个容器e.g. <em>Vector/Hashtable/ConcurrentMap&hellip;</em>）</li>
+</ul>
+<h1 id="对象的组合">对象的组合</h1>
+<h2 id="实例封闭">实例封闭</h2>
+<p>如果某对象不是线程安全的，那么可以通过多种技术使其在多线程程序中安全地使用。你可以确保该对象只能由单个线程访问（线程封闭），或者通过一个锁来保护对该对象的所有访问。</p>
+<p>将数据封装在对象内部，可以将数据的访问限制在对象的方法上，从而更容易确保线程在访问数据时总能持有正确的锁。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PersonSet</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Set<span style="color:#f92672">&lt;</span>Person<span style="color:#f92672">&gt;</span> mySet <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> HashSet<span style="color:#f92672">&lt;</span>Person<span style="color:#f92672">&gt;();</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">addPerson</span><span style="color:#f92672">(</span>Person p<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        mySet<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>p<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">containsPerson</span><span style="color:#f92672">(</span>Person p<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> mySet<span style="color:#f92672">.</span><span style="color:#a6e22e">contains</span><span style="color:#f92672">(</span>p<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>上面的代码段通过封闭与加锁等机制使一个类成为线程安全的（即使这个类的状态变量 <em>HashSet</em> 并不是线程安全的）。由于 <em>mySet</em> 是私有的并且不会逸出，因此 <em>HashSet</em> 被封闭在 <em>PersonSet</em> 中。但如果 <em>Person</em> 类是可变的，那么在访问从 <em>PersonSet</em> 中获得的 <em>Person</em> 对象时，还需要额外的同步。</p>
+<h3 id="java-监视器模式">Java 监视器模式</h3>
+<p>Java 监视器模式仅仅是一种编写代码的约定，对于任何一种锁对象，只要自始至终都是用该锁对象，都可以用来保护对象的状态。下面的代码即是用私有锁来保护状态。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PrivateLock</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Object myLock <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Object<span style="color:#f92672">();</span>
+    Widget widget<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">someMethod</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">synchronized</span><span style="color:#f92672">(</span>myLock<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#75715e">// 修改或访问 widgte 的状态
+</span><span style="color:#75715e"></span>        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="基于监视器模式的示例">基于监视器模式的示例</h3>
+<p>基于监视器模式的车辆追踪</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MonitorVehicleTracher</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;</span> locations<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">MonitorVehicleTracher</span><span style="color:#f92672">(</span>Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;</span> locations<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">locations</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">deepCopy</span><span style="color:#f92672">(</span>locations<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">getLocations</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">deepCopy</span><span style="color:#f92672">(</span>locations<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> MutablePoint <span style="color:#a6e22e">getLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        MutablePoint loc <span style="color:#f92672">=</span> locations<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">null</span> <span style="color:#f92672">==</span> loc <span style="color:#f92672">?</span> <span style="color:#66d9ef">null</span> <span style="color:#f92672">:</span> <span style="color:#66d9ef">new</span> MutablePoint<span style="color:#f92672">(</span>loc<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> y<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        MutablePoint loc <span style="color:#f92672">=</span> locations<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span><span style="color:#f92672">(</span><span style="color:#66d9ef">null</span> <span style="color:#f92672">==</span> loc<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> IllegalArgumentException<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;No such ID: &#34;</span> <span style="color:#f92672">+</span> id<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        loc<span style="color:#f92672">.</span><span style="color:#a6e22e">x</span> <span style="color:#f92672">=</span> x<span style="color:#f92672">;</span>
+        loc<span style="color:#f92672">.</span><span style="color:#a6e22e">y</span> <span style="color:#f92672">=</span> y<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">deepCopy</span><span style="color:#f92672">(</span>Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint m<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;</span> result <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> HashMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> MutablePoint<span style="color:#f92672">&gt;();</span>
+        <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span>String id <span style="color:#f92672">:</span> m<span style="color:#f92672">.</span><span style="color:#a6e22e">keySet</span><span style="color:#f92672">())</span> <span style="color:#f92672">{</span>
+            result<span style="color:#f92672">.</span><span style="color:#a6e22e">put</span><span style="color:#f92672">(</span>id<span style="color:#f92672">,</span> <span style="color:#66d9ef">new</span> MutablePoint<span style="color:#f92672">(</span>m<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">)));</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> Collections<span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">(</span>result<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+<span style="color:#a6e22e">@NotThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MutablePoint</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> y<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">MutablePoint</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        x <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span>
+        y <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">MutablePoint</span><span style="color:#f92672">(</span>MutablePoint p<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">x</span> <span style="color:#f92672">=</span> p<span style="color:#f92672">.</span><span style="color:#a6e22e">x</span><span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">y</span> <span style="color:#f92672">=</span> p<span style="color:#f92672">.</span><span style="color:#a6e22e">y</span><span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>虽然 <em>MutablePoint</em> 不是线程安全的，但追踪器类是线程安全的。其所包含的 <em>Map</em> 对象和可变的 <em>Point</em> 对象都未曾发布。</p>
+<p>在某种程度上，这种实现方式是通过在返回客户代码之前复制可变的数据来维持线程安全性的。通常情况下，这并不存在性能问题，但在车辆容器非常大的情况将极大地降低性能（由于 <em>deepCopy</em> 是从一个 <em>synchronized</em> 方法中调用的，因此在执行时间较长的复制操作中，<em>tracker</em> 的内置锁将一直被占有，当有大量车辆需要追踪时，会严重降低用户界面的响应灵敏度）。</p>
+<p>此外由于每次调用 <em>getLocation</em> 就要复制数据，因此将出现一种错误情况——虽然车辆实际位置发生了变化，但返回的信息却保持不变。这种情况是好是坏，取决于需求。如果在 location 集合上存在内部的一致性需求，那么这就是优点，在这种情况下返回一致的快照就非常重要。然而，如果调用者需要每辆车的最新信息，那么这就是缺点，因为这需要非常频繁地刷新快照。</p>
+<h2 id="线程安全性的委托">线程安全性的委托</h2>
+<p>大多数对象都是组合对象。当从头开始构建一个类，或者将多个非线程安全的类组合为一个类时，Java 监视器模式是非常有用的。但是，如果类中的各个组件都已经是线程安全的，会是什么情况呢？在某些情况下，其是线程安全的，而在某些情况下，这仅仅是一个好的开端。</p>
+<h3 id="基于委托的示例">基于委托的示例</h3>
+<p>基于委托的车辆追踪</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">DelegatingVehicleTracher</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> ConcurrentMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;</span> locations<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;</span> unmodifiableMap<span style="color:#f92672">;</span>
+    
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">DelegatingVehicleTracher</span><span style="color:#f92672">(</span>Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;</span> points<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">locations</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ConcurrentMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;(</span>points<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span> <span style="color:#f92672">=</span> Colletions<span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">(</span><span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">locations</span><span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">getLocations</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Point <span style="color:#a6e22e">getLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> locations<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> y<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>locations<span style="color:#f92672">.</span><span style="color:#a6e22e">replace</span><span style="color:#f92672">(</span>id<span style="color:#f92672">,</span> <span style="color:#66d9ef">new</span> Point<span style="color:#f92672">(</span>x<span style="color:#f92672">,</span> y<span style="color:#f92672">))</span> <span style="color:#f92672">==</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> IllegalArgumentException<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;invalid vechile name: &#34;</span> <span style="color:#f92672">+</span> id<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+<span style="color:#a6e22e">@Immutable</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Point</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> y<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">Point</span><span style="color:#f92672">(</span>Point p<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">x</span> <span style="color:#f92672">=</span> p<span style="color:#f92672">.</span><span style="color:#a6e22e">x</span><span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">y</span> <span style="color:#f92672">=</span> p<span style="color:#f92672">.</span><span style="color:#a6e22e">y</span><span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>由于 <em>Point</em> 类是不可变的，因而它是线程安全的。不可变的值可以被自由地共享与发布，因此在返回 <em>location</em> 时不需要复制。</p>
+<p>而 <em>DelegatingVehicleTracker</em> 中没有使用任何显式的同步，所有对状态的访问都由 <em>ConcurrentMap</em> 来管理，而且 Map 中所有的键值都是不可变的。</p>
+<p>需要注意的是，<em>getLoactions</em> 返回的是一个不可修改但却实时的车辆位置视图。这可能是优点，也可能是缺点，取决于你的需求。</p>
+<p>如果需要一个不发生变化的车辆视图，那么 <em>getLocations</em> 可以返回对 <em>locations</em> 这个 Map 对象的一个浅拷贝（<em>Shallow Copy</em>）。如下所示：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">getLocations</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">return</span> Colletions<span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> HashMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Point<span style="color:#f92672">&gt;(</span>locations<span style="color:#f92672">));</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="发布底层的状态变量">发布底层的状态变量</h3>
+<p>当把线程安全性委托给某个对象的底层状态变量时，在什么条件下才可以发布这些变量从而使其他类能修改他们？答案仍然取决于在类中对这些变量施加了哪些不变性条件。</p>
+<p>如果一个状态变量是线程安全的，并且没有任何不变性条件来约束它的值，在变量的操作上也不存在任何不允许的状态转换，那么就可以安全地发布这个变量。</p>
+<h3 id="发布状态的示例">发布状态的示例</h3>
+<p>发布状态的车辆追踪</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">PublishingVehicleTracher</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> ConcurrentMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> SafePoint<span style="color:#f92672">&gt;</span> locations<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> SafePoint<span style="color:#f92672">&gt;</span> unmodifiableMap<span style="color:#f92672">;</span>
+    
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">PublishingVehicleTracher</span><span style="color:#f92672">(</span>Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> SafePoint<span style="color:#f92672">&gt;</span> points<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">locations</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ConcurrentMap<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> SafePoint<span style="color:#f92672">&gt;(</span>points<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span> <span style="color:#f92672">=</span> Colletions<span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">(</span><span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">locations</span><span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> SafePoint<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">getLocations</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">unmodifiableMap</span><span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> Point <span style="color:#a6e22e">getLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> locations<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setLocation</span><span style="color:#f92672">(</span>String id<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> y<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(!</span>locations<span style="color:#f92672">.</span><span style="color:#a6e22e">containsKey</span><span style="color:#f92672">(</span>id<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> IllegalArgumentException<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;invalid vehicle name: &#34;</span> <span style="color:#f92672">+</span> id<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        locations<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>id<span style="color:#f92672">).</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>x<span style="color:#f92672">,</span> y<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+<span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">SafePoint</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> y<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">SafePoint</span><span style="color:#f92672">(</span><span style="color:#66d9ef">int</span><span style="color:#f92672">[]</span> a<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">(</span>a<span style="color:#f92672">[</span>0<span style="color:#f92672">],</span> a<span style="color:#f92672">[</span>1<span style="color:#f92672">]);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">SafePoint</span><span style="color:#f92672">(</span>SafePoint p<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">(</span>p<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">())</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">SafePoint</span><span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> y<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">x</span> <span style="color:#f92672">=</span> x<span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">y</span> <span style="color:#f92672">=</span> y<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">int</span><span style="color:#f92672">[]</span> <span style="color:#a6e22e">get</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">int</span><span style="color:#f92672">[]</span> <span style="color:#f92672">{</span>x<span style="color:#f92672">,</span> y<span style="color:#f92672">};</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">set</span><span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> x<span style="color:#f92672">,</span> <span style="color:#66d9ef">int</span> y<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">x</span> <span style="color:#f92672">=</span> x<span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">y</span> <span style="color:#f92672">=</span> y<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p><em>PublishingVehicleTracker</em> 将其线程安全性委托给底层的 <em>ConcurrentHashMap</em>，但 <em>Map</em> 中的元素是线程安全且可变的 <em>Point</em>。<em>getLocation</em> 方法返回的是 <em>Map</em> 中的一个不可变副本。</p>
+<h2 id="在现有的线程安全类中添加功能">在现有的线程安全类中添加功能</h2>
+<p>重用能降低开发工作量、开发风险（因为所有的类都已经通过测试）以及维护成本。但更多时候，现有的类只能支持大部分的操作，此时就需要在不破坏线程安全性的情况下添加一个新的操作。</p>
+<p>例如，假设需要一个线程安全的链表，它需要提供一个<strong>原子的</strong>“若没有则添加”的操作。</p>
+<p>要添加一个新的原子操作，最安全的方法是修改原始的类，但这通常无法做到，因为你可能无法访问或修改类的源代码。要想修改原始的类，就需要理解代码中的同步策略，这样新增加的功能才能与原有的设计保持一致。如果直接将新方法添加到类中，那么意味着实现同步策略的所有代码仍然处于一个源代码文件中，从而更容易理解和维护。</p>
+<p>另一种方法是扩展这个类（假定在设计这个类时考虑了可扩展性）。比如下面的扩展 <em>Vector</em>。但不是所有的类都像 <em>Vector</em> 那样将状态向子类公开，因此也就不适用这种方法。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">BetterVector</span><span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> <span style="color:#66d9ef">extends</span> Vector<span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>E x<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">boolean</span> absent <span style="color:#f92672">=</span> <span style="color:#f92672">!</span>contains<span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>absent<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            add<span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> absent<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>扩展的方法比直接将代码添加到类中更加脆弱，因为现在的同步策略实现被分布到多个单独维护的源代码文件中。如果底层的类改变了同步策略并选择了不同的锁来保护它的状态变量，那么子类会被破坏，因为在同步策略改变后它无法再使用正确的锁来控制对基类状态的并发访问。</p>
+<h3 id="客户端加锁机制">客户端加锁机制</h3>
+<p>先看一段错误的代码。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@NotThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ListHelper</span><span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> List<span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> list <span style="color:#f92672">=</span> Colletions<span style="color:#f92672">.</span><span style="color:#a6e22e">synchronizedList</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> ArrayList<span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;());</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>E x<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">boolean</span> absent <span style="color:#f92672">=</span> <span style="color:#f92672">!</span>list<span style="color:#f92672">.</span><span style="color:#a6e22e">contains</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>absent<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            list<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> absent<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>这段代码的问题在于在错误的锁上进行了同步。无论 <em>List</em> 使用哪一个锁来保护它的状态，可以确定的是，这个锁并不是 <em>ListHelper</em> 上的锁。<em>ListHelper</em> 只是带来了同步的假象，尽管所有的链表操作都被声明为 <em>synchronized</em>，但却使用了不同的锁，这意味着 <em>pubIfAbsent</em> 相对于 <em>List</em> 的其他操作来说<strong>并不是原子的</strong>。</p>
+<p>要想使这个方法能正确执行，必须使 <em>List</em> 在实现客户端加锁或外部加锁时使用同一个锁。客户端加锁指，对于使用某个对象 X 的客户端代码，使用 X 本身用于保护其状态的锁来保护这段客户端代码。如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ListHelper</span><span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> List<span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;</span> list <span style="color:#f92672">=</span> Colletions<span style="color:#f92672">.</span><span style="color:#a6e22e">synchronizedList</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> ArrayList<span style="color:#f92672">&lt;</span>E<span style="color:#f92672">&gt;());</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>E x<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">synchronized</span> <span style="color:#f92672">(</span>list<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">boolean</span> absent <span style="color:#f92672">=</span> <span style="color:#f92672">!</span>list<span style="color:#f92672">.</span><span style="color:#a6e22e">contains</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>absent<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                list<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+            <span style="color:#f92672">}</span>
+            <span style="color:#66d9ef">return</span> absent<span style="color:#f92672">;</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>然而，客户端加锁比扩展类更加脆弱，因为它将类 C 的加锁代码放到与 C 完全无关的其他类中。</p>
+<h3 id="组合">组合</h3>
+<p>下面的代码段使用组合（<em>Composition</em>）的方式为现有的类添加一个原子操作。通过将 <em>List</em> 对象的操作委托给底层的 <em>List</em> 示例来实现 <em>List</em> 的操作。（<em>ImprovedList</em> 假设把某个链表对象传给构造函数以后，客户代码不会再直接使用这个对象，而是通过 <em>ImprovedList</em> 来访问）</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@ThreadSafe</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ImprovedList</span><span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> <span style="color:#66d9ef">implements</span> List<span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> List<span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> list<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">ImprovedList</span><span style="color:#f92672">(</span>List<span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> list<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">list</span> <span style="color:#f92672">=</span> list<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>E x<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">boolean</span> absent <span style="color:#f92672">=</span> <span style="color:#f92672">!</span>list<span style="color:#f92672">.</span><span style="color:#a6e22e">contains</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>absent<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            list<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>x<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> absent<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">clear</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        list<span style="color:#f92672">.</span><span style="color:#a6e22e">clear</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+    <span style="color:#75715e">// ... 按照类似的方式委托List的其他方法
+</span><span style="color:#75715e"></span><span style="color:#f92672">}</span>
+</code></pre></div>
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Hello Hugo! &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Hello Hugo!</h1>
+  <time datetime=2020-07-14T15:21:40&#43;0800 class="post-date">Tue, Jul 14, 2020</time>
+  <p>  Hello Hugo!</p>
+<p>  记录用 <strong>Hugo</strong> 生成站点一直到发表第一个帖子的过程。</p>
+<hr>
+<h3 id="生成站点">生成站点</h3>
+<p>  根据官方文档，生成站点的命令：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#75715e"># hugo new site /path/to/site</span>
+</code></pre></div><hr>
+<h3 id="创建文章">创建文章</h3>
+<p>  创建我的第一篇文章。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#75715e"># hugo new post/hellohugo.md</span>
+</code></pre></div><p>  之后就可以在 <strong>.md</strong> 文件中写下要发表的内容啦。</p>
+<hr>
+<h3 id="运行hugo">运行Hugo</h3>
+<p>  在站点根目录下执行：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#75715e"># hugo server --theme=xxxx --buildDrafts</span>
+</code></pre></div><p>  PS：<strong>xxxx</strong> 为主题名，可以自行挑选喜欢的，也可以在根目录的<em>config.toml</em>中直接指定默认的主题，这样在指令中就不用指定了。</p>
+<p>  此时访问 <a href="http://localhost:1313"><em>http://localhost:1313</em></a> 就可以看到本地部署好的 hugo server的效果了。</p>
+<hr>
+<h3 id="部署到github-pages">部署到GitHub Pages</h3>
+<p>  首先在GitHub上创建一个Repository，命名为：<em>xxxx.github.io</em> （<strong>xxxx</strong> 为自己的github用户名）。</p>
+<p>  在站点根目录执行命令生成最终页面：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#75715e"># hugo --theme=hyde --baseUrl=&#34;https://TezaLeMon.github.io/&#34;</span>
+</code></pre></div><p>  PS：这个命令并不会生成草稿页面，需要去掉文章头部的 <em>draft=true</em> 或者改为 <em>draft=false</em> 再重新生成。另外加上 <em>&ndash;buildDrafts</em> 将草稿页面也生成也是可行的（不过似乎不太合乎规范）。</p>
+<p>  此时查看根目录下 <em>public</em> 文件夹就能看到生成的文件。将其 <em>push</em> 到 <em>repository</em> 中就完成了。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#75715e"># cd public</span>
+<span style="color:#75715e"># git init</span>
+<span style="color:#75715e"># git remote add origin https://github.com/TezaLeMon/TezaLeMon.github.io.git</span>
+<span style="color:#75715e"># git add .</span>
+<span style="color:#75715e"># git commit -m &#34;first commit&#34;</span>
+<span style="color:#75715e"># git push -u origin master</span>
+</code></pre></div><p>  至此，我的第一篇文已发出！~ 😏</p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

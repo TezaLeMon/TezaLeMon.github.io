@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>C&#43;&#43;基础知识[4]——多线程并发&amp;锁机制 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>C&#43;&#43;基础知识[4]——多线程并发&amp;锁机制</h1>
+  <time datetime=2021-03-09T15:24:16&#43;0800 class="post-date">Tue, Mar 9, 2021</time>
+  <h2 id="并发的途径">并发的途径</h2>
+<h3 id="多进程并发">多进程并发</h3>
+<p>  在一个应用程序中使用并发的第一种方法，是将应用程序分为多个、独立的、单线程的进程，它们运行在同一时刻，就像你可以同时进行网页浏览和文字处理。这些独立的进程可以通过所有的常规的进程间通信渠道互相传递消讯息（信号、套接字、文件、管道等等）。</p>
+<p>  有一个缺点是这种进程之间的通信通常设置复杂，或是速度较慢，或两者兼备，因为操作系统通常在进程间提供了大量的保护，以避免一个进程不小心修改了属于另一个进程的数据；另一个缺点是运行多个进程所需的固有的开销：启动进程需要时间，操作系统必须投入内部资源来管理进程，等等。</p>
+<p>  当然，也并不全是缺点：操作系统在线程间提供的附加保护操作和更高级别的通信机制，意味着可以比线程更容易地编写安全的并发代码；使用独立的进程实现并发还有一个额外的优势——你可以在通过网络连接的不同的机器上运行的独立的进程。虽然这增加了通信成本，但在一个精心设计的系统上，它可能是一个提高并行可用行和提高性能的低成本方法。</p>
+<h3 id="多线程并发">多线程并发</h3>
+<p>  并发的另一个途径是在单个进程中运行多个线程。线程很像轻量级的进程：每个线程相互独立运行，且每个线程可以运行不同的指令序列。但进程中的所有线程都共享相同的地址空间，并且从所有线程中访问到大部分数据——全局变量仍然是全局的，指针、对象的引用或数据可以在线程之间传递。虽然通常可以在进程之间共享内存，但这难以建立并且通常难以管理，因为同一数据的内存地址在不同的进程中也不尽相同。</p>
+<p>  共享的地址空间，以及缺少线程间的数据保护，使得使用多线程相关的开销远小于使用多个进程，因为操作系统有更少的簿记要做。但是，共享内存的灵活性是有代价的：如果数据要被多个线程访问，那么程序员必须确保当每个线程访问时所看到的数据是一致的。</p>
+<hr>
+<h2 id="使用并发的原因">使用并发的原因</h2>
+<h3 id="为了关注点分离而使用并发">为了关注点分离而使用并发</h3>
+<p>  通过将相关的代码放在一起并将无关的代码分开，可以使你的程序更容易理解和测试，从而减少出错的可能性。你可以使用并发来分隔不同的功能区域，即使在这些不同功能区域的操作需要在同一时刻发生的穷况下；若不显式地使用并发，你要么被迫编写任务切换框架，要么在操作中主动地调用不相关的一段代码。</p>
+<h3 id="为了性能而使用并发">为了性能而使用并发</h3>
+<p>  有两种方式为了性能使用并发。首先，也是最明显的，是将一个单个任务分成几部分且各自并行运行，从而降低总运行时间。这就是任务并行（<em>task parallelism</em>）。虽然这听起来很直观，但它可以是一个相当复杂的过程，因为在各个部分之间可能存在很多的依赖。区别可能是在过程方面——一个线程执行算法的一部分而另一个线程执行算法的另一个部分——或是在数据方面——每个线程在不同的数据部分上执行相同的操作。后一种方法被称为数据并行（<em>data parallelism</em>）。</p>
+<p>  使用并发来提升性能的第二种方法是使用可用的并行方式来解决更大的问题；与其同时处理一个文件，不如酌情处理2个或10个或20个。虽然这实际上只是数据并行的一种应用，通过对多组数据同时执行相同的操作，但还是有不同的重点。处理一个数据块仍然需要同样的时间，但在相同的时间内却可以处理更多的数据。当然，这种方法也存在限制，且并非在所有情况下都是有益的，但是这种方法所带来的吞吐量提升可以让一些新玩意变得可能，例如，如果图片的各部分可以并行处理，就能提高视频处理的分辨率。</p>
+<hr>
+<h2 id="c中的并发编程">C++中的并发编程</h2>
+<p>  这里提一下我在 windows 下使用 <em>mingw</em> 时，使用的版本没有 <em>thread</em> 支持的问题（表面上来看就是没有 <em>_GLIBCXX_HAS_GTHREADS</em> 这一宏定义，如图）。</p>
+<p><img src="../../img/Learn_cppBasic/mingw-thread%E6%97%A0%E6%B3%95%E4%BD%BF%E7%94%A8%E9%97%AE%E9%A2%98.png" alt="mingw-thread无法使用问题"></p>
+<p>  因为懒得改动本地的文件了，换到了一个 <em>centOS</em> 的服务器上跑代码。如果遇到此问题，解决方案见<a href="https://stackoverflow.com/questions/56743884/c-multithreading-with-mingw">C++ Multithreading with MinGW</a> 、<a href="https://stackoverflow.com/questions/37358856/does-mingw-w64-support-stdthread-out-of-the-box-when-using-the-win32-threading">Does MinGW-w64 support std::thread out of the box when using the Win32 threading model?</a></p>
+<h3 id="主线程等待子线程">主线程等待子线程</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;thread&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unistd.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">using</span> <span style="color:#66d9ef">namespace</span> std;
+
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread01</span>()
+{
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Thread 01 is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">1</span>);
+    }
+}
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread02</span>()
+{
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Thread 02 is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">2</span>);
+    }
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
+{
+    <span style="color:#66d9ef">thread</span> task01(thread01);
+    <span style="color:#66d9ef">thread</span> task02(thread02);
+    task01.join();
+    task02.join();
+
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Main thread is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">2</span>);
+    }
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>; 
+}
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># g++ -o threadDemo threadDemo.cpp -std=c++11 -lpthread</span>
+<span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># ./threadDemo </span>
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Main thread is working ！
+Main thread is working ！
+Main thread is working ！
+Main thread is working ！
+Main thread is working ！
+</code></pre></div><h3 id="带参数的子线程">带参数的子线程</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;thread&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unistd.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">using</span> <span style="color:#66d9ef">namespace</span> std;
+    
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread01</span>()
+{
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Thread 01 is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">1</span>);
+    }
+}
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread02</span>()
+{
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Thread 02 is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">2</span>);
+    }
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
+{
+    <span style="color:#66d9ef">thread</span> task01(thread01);
+    <span style="color:#66d9ef">thread</span> task02(thread02);
+    task01.detach();
+    task02.detach();
+                                                                                
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">5</span>; i<span style="color:#f92672">++</span>)
+    {
+        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;Main thread is working ！&#34;</span> <span style="color:#f92672">&lt;&lt;</span> endl;
+        sleep(<span style="color:#ae81ff">2</span>);
+    }
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>; 
+}
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># g++ -o threadDemo threadDemo.cpp -std=c++11 -lpthread</span>
+<span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># ./threadDemo </span>
+Main thread is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Main thread is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Main thread is working ！
+Thread <span style="color:#ae81ff">02</span> is working ！
+Thread <span style="color:#ae81ff">01</span> is working ！
+Main thread is working ！
+Main thread is working ！
+</code></pre></div><h3 id="多线程竞争">多线程竞争</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;thread&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unistd.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;mutex&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">using</span> <span style="color:#66d9ef">namespace</span> std;
+
+mutex mu;
+
+<span style="color:#66d9ef">int</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>;
+
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread01</span>()
+{
+    <span style="color:#66d9ef">while</span> (totalN <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>)
+    {
+        mu.lock(); <span style="color:#75715e">//同步数据锁
+</span><span style="color:#75715e"></span>        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;thread 1 totalN = &#34;</span> <span style="color:#f92672">&lt;&lt;</span> totalN <span style="color:#f92672">&lt;&lt;</span> endl;
+        totalN<span style="color:#f92672">--</span>;
+        sleep(<span style="color:#ae81ff">1</span>);
+        mu.unlock();  <span style="color:#75715e">//解除锁定
+</span><span style="color:#75715e"></span>    }
+}
+<span style="color:#66d9ef">void</span> <span style="color:#a6e22e">thread02</span>()
+{
+    <span style="color:#66d9ef">while</span> (totalN <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>)
+    {
+        mu.lock(); <span style="color:#75715e">//同步数据锁
+</span><span style="color:#75715e"></span>        cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;thread 2 totalN = &#34;</span> <span style="color:#f92672">&lt;&lt;</span> totalN <span style="color:#f92672">&lt;&lt;</span> endl;
+        totalN<span style="color:#f92672">--</span>;
+        sleep(<span style="color:#ae81ff">1</span>);
+        mu.unlock();  <span style="color:#75715e">//解除锁定
+</span><span style="color:#75715e"></span>    }
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>()
+{
+    <span style="color:#66d9ef">thread</span> task02(thread02);
+    <span style="color:#66d9ef">thread</span> task01(thread01);
+    task01.join();
+    task02.join();
+
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>; 
+}
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># g++ -o threadDemo threadDemo.cpp -std=c++11 -lpthread</span>
+<span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># ./threadDemo </span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">10</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">9</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">7</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">6</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">5</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">4</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">3</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>
+thread <span style="color:#ae81ff">2</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>
+thread <span style="color:#ae81ff">1</span> totalN <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</code></pre></div><h2 id="锁机制">锁机制</h2>
+<h3 id="互斥锁量mutex">互斥锁/量（mutex）</h3>
+<p>  提供了以排他方式防止数据结构被并发修改的方法。</p>
+<p>  互斥锁用于控制多个线程对他们之间共享资源互斥访问的一个信号量。也就是说是为了避免多个线程在某一时刻同时操作一个共享资源。例如线程池中的有多个空闲线程和一个任务队列。任何是一个线程都要使用互斥锁互斥访问任务队列，以避免多个线程同时访问任务队列以发生错乱。</p>
+<p>  在某一时刻，只有一个线程可以获取互斥锁，在释放互斥锁之前其他线程都不能获取该互斥锁。如果其他线程想要获取这个互斥锁，那么这个线程只能以阻塞方式进行等待。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;pthread.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+pthread_mutex_init(pthread_mutex_t <span style="color:#f92672">*</span> mutex, <span style="color:#66d9ef">const</span> phtread_mutexattr_t <span style="color:#f92672">*</span> mutexattr);<span style="color:#75715e">//动态方式创建锁，相当于new动态创建一个对象
+</span><span style="color:#75715e"></span>pthread_mutex_destory(pthread_mutex_t <span style="color:#f92672">*</span>mutex)<span style="color:#75715e">//释放互斥锁，相当于delete
+</span><span style="color:#75715e"></span>pthread_mutex_t mutex <span style="color:#f92672">=</span> PTHREAD_MUTEX_INITIALIZER;<span style="color:#75715e">//以静态方式创建锁
+</span><span style="color:#75715e"></span>pthread_mutex_lock(pthread_mutex_t <span style="color:#f92672">*</span>mutex)<span style="color:#75715e">//以阻塞方式运行的。如果之前mutex被加锁了，那么程序会阻塞在这里。
+</span><span style="color:#75715e"></span>pthread_mutex_unlock(pthread_mutex_t <span style="color:#f92672">*</span>mutex)
+<span style="color:#66d9ef">int</span> pthread_mutex_trylock(pthread_mutex_t <span style="color:#f92672">*</span> mutex);<span style="color:#75715e">//会尝试对mutex加锁。如果mutex之前已经被锁定，返回非0；如果mutex没有被锁定，则函数返回并锁定mutex。该函数是以非阻塞方式运行。也就是说如果mutex之前已经被锁定，函数会返回非0，程序继续往下执行。
+</span></code></pre></div><h3 id="条件变量condition">条件变量（condition）</h3>
+<p>  可以以原子的方式阻塞进程，直到某个特定条件为真为止。对条件的测试是在互斥锁的保护下进行的。条件变量始终与互斥锁一起使用。</p>
+<p>  条件锁就是所谓的条件变量，某一个线程因为某个条件为满足时可以使用条件变量使改程序处于阻塞状态。一旦条件满足以&quot;信号量&quot;的方式唤醒一个因为该条件而被阻塞的线程。最为常见就是在线程池中，起初没有任务时任务队列为空，此时线程池中的线程因为&quot;任务队列为空&quot;这个条件处于阻塞状态。一旦有任务进来，就会以信号量的方式唤醒一个线程来处理这个任务。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;pthread.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+pthread_cond_init(pthread_cond_t <span style="color:#f92672">*</span> condtion, <span style="color:#66d9ef">const</span> phtread_condattr_t <span style="color:#f92672">*</span> condattr);<span style="color:#75715e">//对条件变量进行动态初始化，相当于new创建对象
+</span><span style="color:#75715e"></span>pthread_cond_destory(pthread_cond_t <span style="color:#f92672">*</span> condition);<span style="color:#75715e">//释放动态申请的条件变量，相当于delete释放对象
+</span><span style="color:#75715e"></span>pthread_cond_t condition <span style="color:#f92672">=</span> PTHREAD_COND_INITIALIZER;<span style="color:#75715e">//静态初始化条件变量
+</span><span style="color:#75715e"></span>pthread_cond_wait(pthread_cond_t <span style="color:#f92672">*</span> cond, pthread_mutex_t <span style="color:#f92672">*</span> mutex);<span style="color:#75715e">//该函数以阻塞方式执行。如果某个线程中的程序执行了该函数，那么这个线程就会以阻塞方式等待，直到收到pthread_cond_signal或者pthread_cond_broadcast函数发来的信号而被唤醒。
+</span><span style="color:#75715e">//注意：pthread_cond_wait函数的语义相当于：首先解锁互斥锁，然后以阻塞方式等待条件变量的信号，收到信号后又会对互斥锁加锁。
+</span><span style="color:#75715e"></span>
+<span style="color:#75715e">//为了防止“虚假唤醒”，该函数一般放在while循环体中。例如
+</span><span style="color:#75715e"></span>pthread_mutex_lock(mutex);<span style="color:#75715e">//加互斥锁
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">while</span>(<span style="color:#960050;background-color:#1e0010">条件不成立</span>)<span style="color:#75715e">//当前线程中条件变量不成立
+</span><span style="color:#75715e"></span>{
+    pthread_cond_wait(cond, mutex);<span style="color:#75715e">//解锁，其他线程使条件成立发送信号，加锁。
+</span><span style="color:#75715e"></span>}
+...<span style="color:#75715e">//对进程之间的共享资源进行操作
+</span><span style="color:#75715e"></span>pthread_mutex_unlock(mutex);<span style="color:#75715e">//释放互斥锁
+</span></code></pre></div><h3 id="读写锁reader-writer-lock">读写锁（reader-writer lock）</h3>
+<p>  允许多个线程同时<strong>读共享</strong>数据，而对写操作是互斥的。</p>
+<h3 id="自旋锁spin-lock">自旋锁（spin lock）</h3>
+<p>  与互斥锁类似，都是为了保护共享资源。互斥锁是当资源被占用，申请者进入睡眠状态；而自旋锁则<strong>循环检测</strong>保持者是否已经释放锁。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;linux\spinlock.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+spin_lock_init(spinlock_t <span style="color:#f92672">*</span>x);
+spin_lock(x);<span style="color:#75715e">//只有在获得锁的情况下才返回，否则一直&#34;自旋&#34;
+</span><span style="color:#75715e"></span>spin_is_locked(x);<span style="color:#75715e">//该宏用于判断自旋锁x是否已经被某执行单元保持（即被锁）
+</span><span style="color:#75715e">//注意：自旋锁适合于短时间的的轻量级的加锁机制。
+</span></code></pre></div><h2 id="c简单运用">C++简单运用</h2>
+<h3 id="互斥锁">互斥锁</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">#include</span><span style="color:#75715e">&lt;stdlib.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span><span style="color:#75715e">&lt;stdio.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span><span style="color:#75715e">&lt;unistd.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span><span style="color:#75715e">&lt;pthread.h&gt;  </span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">int</span> sum;
+pthread_mutex_t lock;
+
+<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> <span style="color:#a6e22e">add1</span>(<span style="color:#66d9ef">void</span> <span style="color:#f92672">*</span>sum)  
+{       
+    <span style="color:#66d9ef">int</span> i, sum_temp <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    <span style="color:#66d9ef">for</span>(i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">50</span>; i<span style="color:#f92672">++</span>)
+        sum_temp <span style="color:#f92672">+=</span> i;
+    pthread_mutex_lock(<span style="color:#f92672">&amp;</span>lock);
+    <span style="color:#f92672">*</span>((<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)sum) <span style="color:#f92672">+=</span> sum_temp;
+    printf(<span style="color:#e6db74">&#34;add1 complete</span><span style="color:#ae81ff">\t</span><span style="color:#e6db74">sum = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, <span style="color:#f92672">*</span>((<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)sum));
+    pthread_mutex_unlock(<span style="color:#f92672">&amp;</span>lock);  
+    pthread_exit(NULL);  
+}
+<span style="color:#66d9ef">void</span><span style="color:#f92672">*</span> <span style="color:#a6e22e">add2</span>(<span style="color:#66d9ef">void</span> <span style="color:#f92672">*</span>sum)  
+{       
+    <span style="color:#66d9ef">int</span> i, sum_temp <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    <span style="color:#66d9ef">for</span>(i <span style="color:#f92672">=</span> <span style="color:#ae81ff">50</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">100</span>; i<span style="color:#f92672">++</span>)
+        sum_temp <span style="color:#f92672">+=</span> i;
+    pthread_mutex_lock(<span style="color:#f92672">&amp;</span>lock);
+    <span style="color:#f92672">*</span>((<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)sum) <span style="color:#f92672">+=</span> sum_temp;
+    printf(<span style="color:#e6db74">&#34;add2 complete</span><span style="color:#ae81ff">\t</span><span style="color:#e6db74">sum = %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, <span style="color:#f92672">*</span>((<span style="color:#66d9ef">int</span> <span style="color:#f92672">*</span>)sum));
+    pthread_mutex_unlock(<span style="color:#f92672">&amp;</span>lock);  
+    pthread_exit(NULL);  
+}  
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>(<span style="color:#66d9ef">void</span>)  
+{   
+    <span style="color:#66d9ef">int</span> i;  
+    pthread_t ptid1, ptid2;  
+    pthread_mutex_init(<span style="color:#f92672">&amp;</span>lock, NULL);  
+    sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    pthread_create(<span style="color:#f92672">&amp;</span>ptid1, NULL, <span style="color:#f92672">&amp;</span>add1, <span style="color:#f92672">&amp;</span>sum);  
+    pthread_create(<span style="color:#f92672">&amp;</span>ptid2, NULL, <span style="color:#f92672">&amp;</span>add2, <span style="color:#f92672">&amp;</span>sum);  
+    pthread_join(ptid1, NULL);
+    pthread_join(ptid2, NULL);
+    pthread_mutex_lock(<span style="color:#f92672">&amp;</span>lock);
+    printf(<span style="color:#e6db74">&#34;sum %d</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>, sum);
+    pthread_mutex_unlock(<span style="color:#f92672">&amp;</span>lock);
+    pthread_mutex_destroy(<span style="color:#f92672">&amp;</span>lock);  
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0</span>;  
+}
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># g++ -o mutexDemo mutexDemo.cpp -std=c++11 -lpthread</span>
+<span style="color:#f92672">[</span>root@Teza cppDemo<span style="color:#f92672">]</span><span style="color:#75715e"># ./mutexDemo </span>
+add2 complete   sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">3725</span>
+add1 complete   sum <span style="color:#f92672">=</span> <span style="color:#ae81ff">4950</span>
+sum <span style="color:#ae81ff">4950</span>
+</code></pre></div><h2 id="线程安全">线程安全</h2>
+<p>  在拥有共享数据的多条线程并行执行的程序中，线程安全的代码会通过同步机制保证各个线程都可以正常且正确的执行，不会出现数据污染等意外情况。</p>
+<h3 id="保证线程安全的方式">保证线程安全的方式</h3>
+<ul>
+<li>给共享的资源加锁，保证每个资源变量每时每刻至多被一个线程占用。</li>
+<li>让线程也拥有资源，不用去共享进程中的资源。如： 使用 <em>threadlocal</em> 可以为每个线程的维护一个私有的本地变量。</li>
+</ul>
+<h3 id="单例模式">单例模式</h3>
+<p>  单例模式指在整个系统生命周期里，保证一个类只能产生一个实例，确保该类的唯一性。</p>
+<p>  可分为懒汉式和饿汉式，两者之间的区别在于创建实例的时间不同：</p>
+<ul>
+<li>懒汉式：指系统运行中，实例并不存在，只有当需要使用该实例时，才会去创建并使用实例。（这种方式要考虑线程安全）</li>
+<li>饿汉式：指系统一运行，就初始化创建实例，当需要时，直接调用即可。（本身就线程安全，没有多线程的问题）</li>
+</ul>
+<p>  单例类的特点：</p>
+<ul>
+<li>构造函数和析构函数为 private 类型，目的禁止外部构造和析构</li>
+<li>拷贝构造和赋值构造函数为 private 类型，目的是禁止外部拷贝和赋值，确保实例的唯一性</li>
+<li>类里有个获取实例的静态函数，可以全局访问</li>
+</ul>
+<p>参考资料：</p>
+<p><a href="https://ifeve.com/c-concurrency-hello-world/">《C++ 并发编程》－ 第1章 你好，C++的并发世界</a><br>
+<a href="https://www.cnblogs.com/yskn/p/9355556.html">c++的并发操作（多线程）</a><br>
+<a href="https://www.cnblogs.com/steamedbun/p/9376458.html">C++线程中的几种锁</a><br>
+<a href="https://www.cnblogs.com/xiaolincoding/p/11437231.html">C++ 线程安全的单例模式总结</a></p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

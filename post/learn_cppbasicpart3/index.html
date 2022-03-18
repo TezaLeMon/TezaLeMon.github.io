@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>C&#43;&#43;基础知识[3]——IO模型 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>C&#43;&#43;基础知识[3]——IO模型</h1>
+  <time datetime=2021-03-09T13:20:31&#43;0800 class="post-date">Tue, Mar 9, 2021</time>
+  <h2 id="io模型">IO模型</h2>
+<p>  阻塞和非阻塞的概念描述的是用户线程调用内核IO操作的方式：阻塞是指IO操作需要彻底完成后才返回到用户空间；而非阻塞是指IO操作被调用后立即返回给用户一个状态值，无需等到IO操作彻底完成。</p>
+<p>  同步和异步的概念描述的是用户线程与内核的交互方式：同步是指用户线程发起IO请求后需要等待或者轮询内核IO操作完成后才能继续执行；而异步是指用户线程发起IO请求后仍继续执行，当内核IO操作完成后会通知用户线程，或者调用用户线程注册的回调函数。</p>
+<p>  此外，非阻塞I/O系统调用（<em>nonblocking system call</em>）和异步I/O系统调用（<em>asychronous system call</em>）的区别是：一个非阻塞I/O系统调用 <em>read()</em> 操作立即返回的是任何可以立即拿到的数据，可以是完整的结果，也可以是不完整的结果， 还可以是一个空值。而异步I/O系统调用 <em>read()</em> 结果必须是完整的，但是这个操作完成的通知可以延迟到将来的一个时间点。</p>
+<p>  linux 下有五种常见的IO模型：</p>
+<p><img src="../../img/Learn_cppBasic/linux%E5%B8%B8%E8%A7%81IO%E6%A8%A1%E5%9E%8B.png" alt="linux常见IO模型"></p>
+<hr>
+<h3 id="阻塞io模型">阻塞IO模型</h3>
+<p>  应用进程被阻塞，直到数据从内核缓冲区复制到应用进程缓冲区中才返回。</p>
+<p>  应该注意到，在阻塞的过程中，其它应用进程还可以执行，因此阻塞不意味着整个操作系统都被阻塞。因为其它应用进程还可以执行，所以不消耗 CPU 时间，这种模型的 CPU 利用率会比较高。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">{
+    read(socket, buffer);
+    process(buffer);
+}
+<span style="color:#75715e">//即用户需要等待read将socket中的数据读取到buffer后，才继续处理接收的数据。
+</span></code></pre></div><h3 id="非阻塞io模型">非阻塞IO模型</h3>
+<p>  应用进程执行系统调用之后，内核返回一个错误码。应用进程可以继续执行，但是需要不断的执行系统调用来获知 I/O 是否完成，这种方式称为轮询（<em>polling</em>）。</p>
+<p>  由于 CPU 要处理更多的系统调用，因此这种模型的 CPU 利用率比较低。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">{
+    <span style="color:#66d9ef">while</span>(read(socket, buffer) <span style="color:#f92672">!=</span> SUCCESS)
+        ;
+    process(buffer);
+}
+<span style="color:#75715e">//即用户需要不断地调用read，尝试读取socket中的数据，直到读取成功后，才继续处理接收的数据。整个IO请求的过程中，虽然用户线程每次发起IO请求后可以立即返回，但是为了等到数据，仍需要不断地轮询、重复请求，消耗了大量的CPU的资源。一般很少直接使用这种模型，而是在其他IO模型中使用非阻塞IO这一特性。
+</span></code></pre></div><h3 id="多路复用io模型">多路复用IO模型</h3>
+<p>  多路复用是让阻塞发生在我们的多路复用IO操作的系统调用上面，而不是我们真正去执行IO的系统调用。使用这个方式的好处就是可以同时监控多个用于IO的文件描述符。如果一个 Web 服务器没有 I/O 复用，那么每一个 Socket 连接都需要创建一个线程去处理。如果同时有几万个连接，那么就需要创建相同数量的线程。相比于多进程和多线程技术，I/O 复用不需要进程线程创建和切换的开销，系统开销更小。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++">{
+    select(socket);
+    <span style="color:#66d9ef">while</span>(<span style="color:#ae81ff">1</span>) {
+        sockets <span style="color:#f92672">=</span> select();
+        <span style="color:#66d9ef">for</span>(socket in sockets) {
+            <span style="color:#66d9ef">if</span>(can_read(socket)) {
+                read(socket, buffer);
+                process(buffer);
+            }
+        }
+    }
+}
+<span style="color:#75715e">//用户首先将需要进行IO操作的socket添加到select中，然后阻塞等待select系统调用返回。当数据到达时，socket被激活，select函数返回。用户线程正式发起read请求，读取数据并继续执行。
+</span><span style="color:#75715e">//从流程上来看，使用select函数进行IO请求和同步阻塞模型没有太大的区别，甚至还多了添加监视socket，以及调用select函数的额外操作，效率更差。但是，使用select以后最大的优势是用户可以在一个线程内同时处理多个socket的IO请求。用户可以注册多个socket，然后不断地调用select读取被激活的socket，即可达到在同一个线程内同时处理多个IO请求的目的。而在同步阻塞模型中，必须通过多线程的方式才能达到这个目的。
+</span></code></pre></div><h3 id="信号驱动io模型">信号驱动IO模型</h3>
+<p>  所谓信号驱动，就是利用信号机制，安装信号 <em>SIGIO</em> 的处理函数（进行IO相关操作），通过监控文件描述符，当其就绪时，通知目标进程进行IO操作（<em>signal handler</em>）。</p>
+<h3 id="异步io模型">异步IO模型</h3>
+<p>  应用进程执行 <em>aio_read</em> 系统调用会立即返回，应用进程可以继续执行，不会被阻塞，内核会在所有操作完成之后向应用进程发送信号。</p>
+<p>  &ldquo;真正&quot;的异步IO需要操作系统更强的支持。在IO多路复用模型中，事件循环将文件句柄的状态事件通知给用户线程，由用户线程自行读取数据、处理数据。而在异步IO模型中，当用户线程收到通知时，数据已经被内核读取完毕，并放在了用户线程指定的缓冲区内，内核在IO完成后通知用户线程直接使用即可。</p>
+<p>  异步 I/O 与信号驱动 I/O 的区别在于，异步 I/O 的信号是通知应用进程 I/O 完成，而信号驱动 I/O 的信号是通知应用进程可以开始 I/O。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#66d9ef">void</span> UserCompletionHandler<span style="color:#f92672">::</span>handle_event(buffer) 
+{
+    process(buffer);
+}
+
+{
+    aio_read(socket, <span style="color:#66d9ef">new</span> UserCompletionHandler);
+}
+</code></pre></div><p>参考资料：</p>
+<p><a href="https://www.zhihu.com/question/19732473/answer/20851256">怎样理解阻塞非阻塞与同步异步的区别？答主@Yi Lu</a><br>
+<a href="https://www.zhihu.com/question/19732473/answer/241673170">怎样理解阻塞非阻塞与同步异步的区别？答主@萧萧</a><br>
+<a href="https://www.cnblogs.com/kuzhon/articles/5615283.html">高性能IO模型浅析</a><br>
+<a href="https://www.cnblogs.com/ittinybird/p/4666044.html">Linux下5种IO模型的小结</a><br>
+<a href="http://www.cyc2018.xyz/%E8%AE%A1%E7%AE%97%E6%9C%BA%E5%9F%BA%E7%A1%80/Socket/Socket.html#%E4%B8%80%E3%80%81i-o-%E6%A8%A1%E5%9E%8B">CS-Notes</a></p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

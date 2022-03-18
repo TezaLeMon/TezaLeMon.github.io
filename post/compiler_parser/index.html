@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>类C语言编译器-语法分析器 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>类C语言编译器-语法分析器</h1>
+  <time datetime=2020-12-09T18:05:54&#43;0800 class="post-date">Wed, Dec 9, 2020</time>
+  <p>  语法分析的主要任务就是根据文法，对由词法分析器给出的单词序列进行分析。在本次设计中，采用LR（1）分析方法。由于文法需要转化为状态转移表（即 <em>ACTION - GOTO 表</em> ），故本语法分析器大致分为<strong>生成状态转移表</strong>和**语法分析（根据状态转移表进行移进-规约）**两个部分。</p>
+<p>  最后用Qt做了简单的UI展示，最终效果如下：</p>
+<p><img src="../../img/compiler_parser/ProgramUI.png" alt="ProgramUI"></p>
+<hr>
+<h2 id="生成状态转移表---gettable">生成状态转移表 - GetTable</h2>
+<p>  自动生成状态转移表模块是根据已知文法，首先求各非终结符的First集，接着求每个项目的闭包，并依次构造LR(1)项目集，根据项目集自动构建ACTION表和GOTO表。</p>
+<p>  流程图如下：（PS：绘制流程图时对LR(1)分析过程还不够清除，流程中Follow集实际并未用到）
+<img src="../../img/compiler_parser/getTable_flow.jpg" alt="getTable_flow"></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.h
+</span><span style="color:#75715e"></span><span style="color:#75715e">#ifndef MYPARSER_H
+</span><span style="color:#75715e">#define MYPARSER_H
+</span><span style="color:#75715e"></span>
+<span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;fstream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unordered_map&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unordered_set&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;string&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;vector&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;cstddef&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;functional&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#75715e">//项目
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Project</span>
+{
+    <span style="color:#66d9ef">int</span> pro_num;								<span style="color:#75715e">//表示第pro_num个产生式，0表示拓展的产生式
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">int</span> dot_position;							<span style="color:#75715e">//当前点的位置，位置的取值比产生式右端长度大1
+</span><span style="color:#75715e"></span>    std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> successors; <span style="color:#75715e">//后继符
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> <span style="color:#66d9ef">operator</span><span style="color:#f92672">==</span>(Project<span style="color:#f92672">&amp;</span> right);
+};
+
+<span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Grammer</span>
+{
+    std<span style="color:#f92672">::</span>string left;
+    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> right;
+};
+
+<span style="color:#75715e">/*
+</span><span style="color:#75715e"> * hash函数返回哈希值
+</span><span style="color:#75715e"> * eq则为set提供相等操作
+</span><span style="color:#75715e"> * 这样就可以把Project作为set的关系
+</span><span style="color:#75715e"> */</span>
+
+size_t <span style="color:#a6e22e">hasher</span>(<span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p);
+<span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">eq</span>(<span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p1, <span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p2);
+
+<span style="color:#66d9ef">class</span> <span style="color:#a6e22e">GetTable</span>
+{
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+    <span style="color:#66d9ef">typedef</span> std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>Project, <span style="color:#66d9ef">decltype</span>(hasher)<span style="color:#f92672">*</span>, <span style="color:#66d9ef">decltype</span>(eq)<span style="color:#f92672">*&gt;</span> Status;	<span style="color:#75715e">//项目集
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">typedef</span> std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span>, std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&gt;</span> Atable;
+    <span style="color:#66d9ef">typedef</span> std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span>, std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, <span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;&gt;</span> Gtable;
+
+    std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;&gt;</span> index;					<span style="color:#75715e">//存储各非终结符的定义的序列号集合
+</span><span style="color:#75715e"></span>    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> V, T;													<span style="color:#75715e">//存储非终结集和终结集
+</span><span style="color:#75715e"></span>    std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&gt;</span> first, follow; <span style="color:#75715e">//存储first和follow集合
+</span><span style="color:#75715e"></span>    std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span>, Status<span style="color:#f92672">&gt;</span> statuses;										<span style="color:#75715e">//规范状态集
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+    Atable action;
+    Gtable goTo;
+    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>Grammer<span style="color:#f92672">&gt;</span> G;
+    GetTable();
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">initTable</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inAction, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGoto);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">fillAction</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">fillGoto</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">get_grammer</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in);												   <span style="color:#75715e">//从文件读取文法规则
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">get_first</span>();																	   <span style="color:#75715e">//获得first集合
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">get_follow</span>();																	   <span style="color:#75715e">//获得follow集合
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">inVT</span>(std<span style="color:#f92672">::</span>string s);															   <span style="color:#75715e">//判断在V还是T里，1为V
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">judge_first</span>(std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> s, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> result); <span style="color:#75715e">//判断串s的first集合是否包含ε
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">get_closure</span>(Status<span style="color:#f92672">&amp;</span> p);														   <span style="color:#75715e">//求项目闭包
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">judge_repeat</span>(Status s1, Status s2);											   <span style="color:#75715e">//判断两个状态是否重复
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">judge_conflict</span>(Status<span style="color:#f92672">&amp;</span> s, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> result);			   <span style="color:#75715e">//判断一个状态是否有移进-归约冲突
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">get_status</span>();																	   <span style="color:#75715e">//获得状态集合
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">print</span>(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> o1, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> o2);									   <span style="color:#75715e">//打印归约产生式子
+</span><span style="color:#75715e"></span>};
+
+<span style="color:#75715e">#endif
+</span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//getTable.cpp
+</span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;getTable.h&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">bool</span> Project<span style="color:#f92672">::</span><span style="color:#66d9ef">operator</span><span style="color:#f92672">==</span>(Project<span style="color:#f92672">&amp;</span> right)
+{
+	<span style="color:#66d9ef">if</span> (<span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>pro_num <span style="color:#f92672">==</span> right.pro_num <span style="color:#f92672">&amp;&amp;</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>dot_position <span style="color:#f92672">==</span> right.dot_position <span style="color:#f92672">&amp;&amp;</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>successors.size() <span style="color:#f92672">==</span> right.successors.size())
+	{
+		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> t : right.successors)
+		{
+			<span style="color:#66d9ef">if</span> (<span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>successors.find(t) <span style="color:#f92672">==</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>successors.end())
+				<span style="color:#66d9ef">return</span> false;
+		}
+
+		<span style="color:#66d9ef">return</span> true;
+	}
+
+	<span style="color:#66d9ef">return</span> false;
+}
+
+size_t <span style="color:#a6e22e">hasher</span>(<span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p)
+{
+	<span style="color:#66d9ef">return</span> std<span style="color:#f92672">::</span>hash<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>()(p.pro_num <span style="color:#f92672">*</span> p.dot_position);
+}
+
+<span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">eq</span>(<span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p1, <span style="color:#66d9ef">const</span> Project<span style="color:#f92672">&amp;</span> p2)
+{
+	<span style="color:#66d9ef">if</span> (p1.pro_num <span style="color:#f92672">==</span> p2.pro_num <span style="color:#f92672">&amp;&amp;</span> p1.dot_position <span style="color:#f92672">==</span> p2.dot_position)
+		<span style="color:#66d9ef">return</span> true;
+	<span style="color:#66d9ef">return</span> false;
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>fillAction(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in) {
+    std<span style="color:#f92672">::</span>string tmp2, atmp3;
+    <span style="color:#66d9ef">int</span> tmp1;
+    <span style="color:#66d9ef">while</span> (in <span style="color:#f92672">&gt;&gt;</span> tmp1, in <span style="color:#f92672">&gt;&gt;</span> tmp2, in <span style="color:#f92672">&gt;&gt;</span> atmp3) {
+        action[tmp1][tmp2] <span style="color:#f92672">=</span> atmp3;
+    }
+
+
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>fillGoto(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in) {
+    std<span style="color:#f92672">::</span>string tmp2, atmp3;
+    <span style="color:#66d9ef">int</span> tmp1, gtmp3;
+    <span style="color:#66d9ef">while</span> (in <span style="color:#f92672">&gt;&gt;</span> tmp1, in <span style="color:#f92672">&gt;&gt;</span> tmp2, in <span style="color:#f92672">&gt;&gt;</span> gtmp3) {
+        goTo[tmp1][tmp2] <span style="color:#f92672">=</span> gtmp3;
+	}
+}
+
+GetTable<span style="color:#f92672">::</span>GetTable()
+{
+	<span style="color:#75715e">//初始化非终结符和终结符
+</span><span style="color:#75715e"></span>	V <span style="color:#f92672">=</span> { <span style="color:#e6db74">&#34;S&#34;</span>, <span style="color:#e6db74">&#34;Program&#34;</span>, <span style="color:#e6db74">&#34;Type&#34;</span>, <span style="color:#e6db74">&#34;Block&#34;</span>, <span style="color:#e6db74">&#34;Stmts&#34;</span>, <span style="color:#e6db74">&#34;Decl&#34;</span>, <span style="color:#e6db74">&#34;Stmt&#34;</span>, <span style="color:#e6db74">&#34;ForAssignment&#34;</span>, <span style="color:#e6db74">&#34;Assignment&#34;</span>, <span style="color:#e6db74">&#34;Bool&#34;</span>, <span style="color:#e6db74">&#34;Rel&#34;</span>, <span style="color:#e6db74">&#34;LExpr&#34;</span>, <span style="color:#e6db74">&#34;HExpr&#34;</span>, <span style="color:#e6db74">&#34;Factor&#34;</span>, <span style="color:#e6db74">&#34;Self_op&#34;</span>, <span style="color:#e6db74">&#34;HLogic_op&#34;</span>, <span style="color:#e6db74">&#34;LLogic_op&#34;</span>, <span style="color:#e6db74">&#34;HMath_op&#34;</span>, <span style="color:#e6db74">&#34;LMath_op&#34;</span>, <span style="color:#e6db74">&#34;Judge_op&#34;</span>, <span style="color:#e6db74">&#34;Bool_value&#34;</span>, <span style="color:#e6db74">&#34;Array&#34;</span>, <span style="color:#e6db74">&#34;Fora&#34;</span>, <span style="color:#e6db74">&#34;Forb&#34;</span>, <span style="color:#e6db74">&#34;Forc&#34;</span>, <span style="color:#e6db74">&#34;HRel&#34;</span>, <span style="color:#e6db74">&#34;LArray&#34;</span>, <span style="color:#e6db74">&#34;M&#34;</span>, <span style="color:#e6db74">&#34;N&#34;</span> };
+
+	T <span style="color:#f92672">=</span> { <span style="color:#e6db74">&#34;(&#34;</span>, <span style="color:#e6db74">&#34;)&#34;</span>, <span style="color:#e6db74">&#34;main&#34;</span>, <span style="color:#e6db74">&#34;int&#34;</span>, <span style="color:#e6db74">&#34;bool&#34;</span>, <span style="color:#e6db74">&#34;return&#34;</span>, <span style="color:#e6db74">&#34;;&#34;</span>, <span style="color:#e6db74">&#34;{&#34;</span>, <span style="color:#e6db74">&#34;}&#34;</span>, <span style="color:#e6db74">&#34;if&#34;</span>, <span style="color:#e6db74">&#34;else&#34;</span>, <span style="color:#e6db74">&#34;while&#34;</span>, <span style="color:#e6db74">&#34;for&#34;</span>, <span style="color:#e6db74">&#34;Identifier&#34;</span>, <span style="color:#e6db74">&#34;Num&#34;</span>, <span style="color:#e6db74">&#34;[&#34;</span>, <span style="color:#e6db74">&#34;]&#34;</span>, <span style="color:#e6db74">&#34;true&#34;</span>, <span style="color:#e6db74">&#34;false&#34;</span>, <span style="color:#e6db74">&#34;==&#34;</span>, <span style="color:#e6db74">&#34;!=&#34;</span>, <span style="color:#e6db74">&#34;&gt;=&#34;</span>, <span style="color:#e6db74">&#34;&lt;=&#34;</span>, <span style="color:#e6db74">&#34;&gt;&#34;</span>, <span style="color:#e6db74">&#34;&lt;&#34;</span>, <span style="color:#e6db74">&#34;+&#34;</span>, <span style="color:#e6db74">&#34;-&#34;</span>, <span style="color:#e6db74">&#34;*&#34;</span>, <span style="color:#e6db74">&#34;/&#34;</span>, <span style="color:#e6db74">&#34;%&#34;</span>, <span style="color:#e6db74">&#34;||&#34;</span>, <span style="color:#e6db74">&#34;&amp;&amp;&#34;</span>, <span style="color:#e6db74">&#34;++&#34;</span>, <span style="color:#e6db74">&#34;--&#34;</span>, <span style="color:#e6db74">&#34;!&#34;</span>, <span style="color:#e6db74">&#34;-&#34;</span>, <span style="color:#e6db74">&#34;;&#34;</span>, <span style="color:#e6db74">&#34;=&#34;</span>, <span style="color:#e6db74">&#34;ε&#34;</span> }; <span style="color:#75715e">//这里把ε也作为终结符看待
+</span><span style="color:#75715e"></span>
+	std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> empty_set;
+	std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> empty_set_int;
+
+	<span style="color:#75715e">//初始化first和follow集
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> i : V)
+	{
+		first.insert({ i, empty_set });
+		follow.insert({ i, empty_set });
+		index.insert({ i, empty_set_int });
+	}
+
+	follow[<span style="color:#e6db74">&#34;Program&#34;</span>].insert(<span style="color:#e6db74">&#34;#&#34;</span>);
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>initTable(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inAction, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGoto)
+{
+    get_grammer(inGrammar);
+
+    <span style="color:#66d9ef">while</span>(<span style="color:#f92672">!</span>inAction.eof()){
+        <span style="color:#66d9ef">int</span> f1;
+        std<span style="color:#f92672">::</span>string f2, f3;
+        inAction <span style="color:#f92672">&gt;&gt;</span> f1 <span style="color:#f92672">&gt;&gt;</span> f2 <span style="color:#f92672">&gt;&gt;</span> f3;
+        action[f1][f2] <span style="color:#f92672">=</span> f3;
+    }
+
+    <span style="color:#66d9ef">while</span>(<span style="color:#f92672">!</span>inGoto.eof()){
+        <span style="color:#66d9ef">int</span> f1, f3;
+        std<span style="color:#f92672">::</span>string f2;
+        inGoto <span style="color:#f92672">&gt;&gt;</span> f1 <span style="color:#f92672">&gt;&gt;</span> f2 <span style="color:#f92672">&gt;&gt;</span> f3;
+        goTo[f1][f2] <span style="color:#f92672">=</span> f3;
+    }
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>get_grammer(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> in)
+{
+    std<span style="color:#f92672">::</span>string tmp;
+	Grammer gtmp;
+
+    <span style="color:#66d9ef">while</span> (in <span style="color:#f92672">&gt;&gt;</span> tmp)
+    {
+        gtmp.left <span style="color:#f92672">=</span> tmp;
+		gtmp.right.clear();
+		in <span style="color:#f92672">&gt;&gt;</span> tmp <span style="color:#f92672">&gt;&gt;</span> tmp;
+		<span style="color:#66d9ef">while</span> (tmp <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#34;#&#34;</span>)
+		{
+            gtmp.right.push_back(tmp);
+			in <span style="color:#f92672">&gt;&gt;</span> tmp;
+		}
+		G.push_back(gtmp);
+	}
+
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G.size()); i<span style="color:#f92672">++</span>)
+		index[G[i].left].insert(i);
+}
+
+<span style="color:#75715e">//在非终结符集 返回true		在终结符集 返回false
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> GetTable<span style="color:#f92672">::</span>inVT(std<span style="color:#f92672">::</span>string s)
+{
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> i : V)
+	{
+		<span style="color:#66d9ef">if</span> (i <span style="color:#f92672">==</span> s)
+			<span style="color:#66d9ef">return</span> true;
+	}
+
+	<span style="color:#66d9ef">return</span> false;
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>get_first()
+{
+	<span style="color:#66d9ef">bool</span> change <span style="color:#f92672">=</span> true; <span style="color:#75715e">//表示若改动了一处，则需要重新便利
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">bool</span> is_empty;		<span style="color:#75715e">//表示产生式右端为空串
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">int</span> t;
+	<span style="color:#75715e">//循环，直到没有改动为止，即change = false
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">while</span> (change)
+	{
+		change <span style="color:#f92672">=</span> false;
+		<span style="color:#75715e">//循环每个文法
+</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span><span style="color:#f92672">&amp;</span> g : G)
+		{
+			is_empty <span style="color:#f92672">=</span> true;
+			t <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+			<span style="color:#66d9ef">while</span> (is_empty <span style="color:#f92672">&amp;&amp;</span> t <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(g.right.size()))
+			{
+				is_empty <span style="color:#f92672">=</span> false;
+				<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>inVT(g.right[t]))
+				{ <span style="color:#75715e">//产生式右边是终结符
+</span><span style="color:#75715e"></span>					<span style="color:#66d9ef">if</span> (first[g.left].find(g.right[t]) <span style="color:#f92672">==</span> first[g.left].end())
+					{
+						<span style="color:#75715e">//若不在产生式左边非终结符的FIRST集里 则将此终结符插入
+</span><span style="color:#75715e"></span>						first[g.left].insert(g.right[t]);
+						change <span style="color:#f92672">=</span> true;
+					}
+					<span style="color:#66d9ef">continue</span>;
+				}
+
+				<span style="color:#75715e">//产生式右边是非终结符
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> i : first[g.right[t]])
+				{
+					<span style="color:#66d9ef">if</span> (first[g.left].find(i) <span style="color:#f92672">==</span> first[g.left].end())
+					{
+						<span style="color:#75715e">//若不在产生式左边的FIRST集里 则将此非终结符的FIRST集插入
+</span><span style="color:#75715e"></span>						first[g.left].insert(i);
+						change <span style="color:#f92672">=</span> true;
+					}
+				}
+
+				<span style="color:#66d9ef">if</span> (first[g.right[t]].find(<span style="color:#e6db74">&#34;ε&#34;</span>) <span style="color:#f92672">!=</span> first[g.right[t]].end())
+				{
+					is_empty <span style="color:#f92672">=</span> true;
+					t<span style="color:#f92672">++</span>;
+				}
+			}
+			<span style="color:#66d9ef">if</span> (t <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(g.right.size()) <span style="color:#f92672">&amp;&amp;</span> first[g.left].find(<span style="color:#e6db74">&#34;ε&#34;</span>) <span style="color:#f92672">==</span> first[g.left].end())
+			{
+				first[g.left].insert(<span style="color:#e6db74">&#34;ε&#34;</span>);
+				change <span style="color:#f92672">=</span> true;
+			}
+		}
+	}
+
+	first.erase(<span style="color:#e6db74">&#34;S&#34;</span>);
+}
+
+<span style="color:#75715e">// FIRST(αβγ...)
+</span><span style="color:#75715e">// 将 αβγ... 的FIRST集返回到result中
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>judge_first(std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> s, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> result)
+{
+	<span style="color:#66d9ef">int</span> count <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> i : s)
+	{
+		<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>inVT(i))
+		{
+			result.insert(i);
+			<span style="color:#66d9ef">break</span>;
+		}
+		<span style="color:#66d9ef">if</span> (first[i].find(<span style="color:#e6db74">&#34;ε&#34;</span>) <span style="color:#f92672">==</span> first[i].end())
+		{
+			result.insert(first[i].begin(), first[i].end());
+			<span style="color:#66d9ef">break</span>;
+		}
+
+		result.insert(first[i].begin(), first[i].end());
+		result.erase(<span style="color:#e6db74">&#34;ε&#34;</span>);
+		count<span style="color:#f92672">++</span>;
+	}
+
+	<span style="color:#66d9ef">if</span> (count <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(s.size()))
+		result.insert(<span style="color:#e6db74">&#34;ε&#34;</span>);
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>get_follow()
+{
+	<span style="color:#75715e">//与求first集类似，设置change
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">bool</span> change <span style="color:#f92672">=</span> true;
+	<span style="color:#66d9ef">while</span> (change)
+	{
+		change <span style="color:#f92672">=</span> false;
+		<span style="color:#75715e">//循环每个文法
+</span><span style="color:#75715e"></span>		std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;::</span>iterator search_next; <span style="color:#75715e">//向后扫描指针
+</span><span style="color:#75715e"></span>		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span><span style="color:#f92672">&amp;</span> g : G)
+		{
+			<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> it <span style="color:#f92672">=</span> g.right.begin(); it <span style="color:#f92672">!=</span> g.right.end(); it<span style="color:#f92672">++</span>)
+			{
+				<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>inVT(<span style="color:#f92672">*</span>it)) <span style="color:#75715e">//是终结符
+</span><span style="color:#75715e"></span>					<span style="color:#66d9ef">continue</span>;
+				<span style="color:#66d9ef">auto</span> original <span style="color:#f92672">=</span> follow[<span style="color:#f92672">*</span>it].size();
+				search_next <span style="color:#f92672">=</span> it <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+				<span style="color:#66d9ef">if</span> (search_next <span style="color:#f92672">!=</span> g.right.end())
+				{
+					std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> tmp(search_next, g.right.end());
+					std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> stmp;	<span style="color:#75715e">//tmp的FIRST集
+</span><span style="color:#75715e"></span>					judge_first(tmp, stmp);
+					follow[<span style="color:#f92672">*</span>it].insert(stmp.begin(), stmp.end());
+					<span style="color:#66d9ef">if</span> (stmp.find(<span style="color:#e6db74">&#34;ε&#34;</span>) <span style="color:#f92672">!=</span> stmp.end())
+					{
+						follow[<span style="color:#f92672">*</span>it].erase(<span style="color:#e6db74">&#34;ε&#34;</span>);
+						<span style="color:#75715e">//产生式左边FOLLOW集插入到产生式右边FOLLOW集
+</span><span style="color:#75715e"></span>						follow[<span style="color:#f92672">*</span>it].insert(follow[g.left].begin(), follow[g.left].end());
+					}
+					<span style="color:#66d9ef">if</span> (original <span style="color:#f92672">&lt;</span> follow[<span style="color:#f92672">*</span>it].size())
+						change <span style="color:#f92672">=</span> true;
+				}
+				<span style="color:#66d9ef">else</span>	<span style="color:#75715e">//已分析到末尾
+</span><span style="color:#75715e"></span>				{
+					follow[<span style="color:#f92672">*</span>it].insert(follow[g.left].begin(), follow[g.left].end());
+					<span style="color:#66d9ef">if</span> (original <span style="color:#f92672">&lt;</span> follow[<span style="color:#f92672">*</span>it].size())
+						change <span style="color:#f92672">=</span> true;
+				}
+			}
+		}
+	}
+
+	follow.erase(<span style="color:#e6db74">&#34;S&#34;</span>);
+}
+
+<span style="color:#75715e">//求项目集的闭包 CLOSURE(I)
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>get_closure(Status<span style="color:#f92672">&amp;</span> p)
+{
+	<span style="color:#75715e">//static int i = 0;
+</span><span style="color:#75715e"></span>	<span style="color:#75715e">//printf_s(&#34;%d&#34;, i++);
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">bool</span> change <span style="color:#f92672">=</span> true;
+	Status pptmp;
+	<span style="color:#66d9ef">while</span> (change)
+	{
+		change <span style="color:#f92672">=</span> false;
+		pptmp <span style="color:#f92672">=</span> p;
+		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span><span style="color:#f92672">&amp;</span> pro : pptmp)
+		{
+			<span style="color:#66d9ef">if</span> (pro.dot_position <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G[pro.pro_num].right.size()))	<span style="color:#75715e">// · 位于项目末尾
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">continue</span>;
+			std<span style="color:#f92672">::</span>string V <span style="color:#f92672">=</span> G[pro.pro_num].right[pro.dot_position];
+			<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>inVT(V))	<span style="color:#75715e">// · 位于终结符前
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">continue</span>;
+
+			std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> new_successor;	<span style="color:#75715e">//新项目的后继符集
+</span><span style="color:#75715e"></span>
+			<span style="color:#75715e">//求新项目的后继符集
+</span><span style="color:#75715e"></span>			<span style="color:#66d9ef">if</span> (pro.dot_position <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G[pro.pro_num].right.size()) <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>)	<span style="color:#75715e">// · 位于项目末尾前1的位置
+</span><span style="color:#75715e"></span>				new_successor <span style="color:#f92672">=</span> pro.successors;
+			<span style="color:#66d9ef">else</span>
+			{
+				std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> vtmp(G[pro.pro_num].right.begin() <span style="color:#f92672">+</span> pro.dot_position <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>, G[pro.pro_num].right.end());
+				judge_first(vtmp, new_successor);
+				<span style="color:#66d9ef">if</span> (new_successor.find(<span style="color:#e6db74">&#34;ε&#34;</span>) <span style="color:#f92672">!=</span> new_successor.end())
+				{
+					new_successor.insert(pro.successors.begin(), pro.successors.end());
+					new_successor.erase(<span style="color:#e6db74">&#34;ε&#34;</span>);
+				}
+			}
+
+			Project ptmp;
+			<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span><span style="color:#f92672">&amp;</span> i : index[V])
+			{
+				ptmp.pro_num <span style="color:#f92672">=</span> i;
+				ptmp.dot_position <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+				ptmp.successors <span style="color:#f92672">=</span> new_successor;
+				<span style="color:#66d9ef">if</span> (p.find(ptmp) <span style="color:#f92672">==</span> p.end())	<span style="color:#75715e">//项目不存在项目集中
+</span><span style="color:#75715e"></span>				{
+					p.insert(ptmp);
+					change <span style="color:#f92672">=</span> true;
+				}
+				<span style="color:#66d9ef">else</span>
+				{
+					<span style="color:#66d9ef">auto</span> s <span style="color:#f92672">=</span> p.find(ptmp);
+					<span style="color:#66d9ef">auto</span> original <span style="color:#f92672">=</span> s<span style="color:#f92672">-&gt;</span>successors.size();
+					ptmp.successors.insert(s<span style="color:#f92672">-&gt;</span>successors.begin(), s<span style="color:#f92672">-&gt;</span>successors.end());
+					p.erase(<span style="color:#f92672">*</span>s);
+					p.insert(ptmp);
+
+					<span style="color:#66d9ef">if</span> (original <span style="color:#f92672">&lt;</span> ptmp.successors.size())
+						change <span style="color:#f92672">=</span> true;
+				}
+			}
+		}
+	}
+}
+
+<span style="color:#75715e">//判断项目集是否重复
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> GetTable<span style="color:#f92672">::</span>judge_repeat(Status s1, Status s2)
+{
+	<span style="color:#66d9ef">if</span> (s1.size() <span style="color:#f92672">==</span> s2.size())
+	{
+		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> pros : s1)
+		{
+			<span style="color:#66d9ef">if</span> (s2.find(pros) <span style="color:#f92672">==</span> s2.end())
+				<span style="color:#66d9ef">return</span> false;
+			<span style="color:#66d9ef">else</span>
+			{
+				Project tmp <span style="color:#f92672">=</span> <span style="color:#f92672">*</span>(s2.find(pros));
+				<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>(tmp <span style="color:#f92672">==</span> pros))
+					<span style="color:#66d9ef">return</span> false;
+			}
+		}
+		<span style="color:#66d9ef">return</span> true;
+	}
+	<span style="color:#66d9ef">return</span> false;
+}
+
+<span style="color:#75715e">//检查项目集是否有冲突
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">bool</span> GetTable<span style="color:#f92672">::</span>judge_conflict(Status<span style="color:#f92672">&amp;</span> s, std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> result)
+{
+	<span style="color:#66d9ef">bool</span> flag <span style="color:#f92672">=</span> false;
+	std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> tmp;
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> pro : s)
+	{
+		<span style="color:#66d9ef">if</span> (pro.dot_position <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G[pro.pro_num].right.size()))	<span style="color:#75715e">// · 位于项目末尾
+</span><span style="color:#75715e"></span>			tmp.insert(pro.successors.begin(), pro.successors.end());
+	}
+
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> pro : s)
+	{
+		<span style="color:#66d9ef">if</span> (pro.dot_position <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G[pro.pro_num].right.size()))
+		{
+			std<span style="color:#f92672">::</span>string next <span style="color:#f92672">=</span> G[pro.pro_num].right[pro.dot_position];
+			<span style="color:#66d9ef">if</span> (tmp.find(next) <span style="color:#f92672">!=</span> tmp.end())
+			{
+				result.insert(next);
+				flag <span style="color:#f92672">=</span> true;
+			}
+		}
+	}
+
+	<span style="color:#66d9ef">return</span> flag;
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>get_status()
+{
+	<span style="color:#75715e">//初始化第一个状态0（项目集I0）
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">int</span> t <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+	Project ptmp;
+	ptmp.dot_position <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+	ptmp.pro_num <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+	ptmp.successors <span style="color:#f92672">=</span> { <span style="color:#e6db74">&#34;#&#34;</span> };
+	Status <span style="color:#a6e22e">tmp_status</span>(<span style="color:#ae81ff">10</span>, hasher, eq);
+	tmp_status.insert(ptmp);
+	get_closure(tmp_status);
+
+	statuses.insert({ t, tmp_status });
+
+	<span style="color:#75715e">//获取状态集合
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">bool</span> change <span style="color:#f92672">=</span> true;
+	std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> record; <span style="color:#75715e">//记录已经求过的状态(项目集)
+</span><span style="color:#75715e"></span>	std<span style="color:#f92672">::</span>unordered_map<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span>, Status<span style="color:#f92672">&gt;</span> sstmp;
+	std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> conflict;
+
+	<span style="color:#66d9ef">while</span> (change)
+	{
+		change <span style="color:#f92672">=</span> false;
+		sstmp <span style="color:#f92672">=</span> statuses;
+
+		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span><span style="color:#f92672">&amp;</span> sta : sstmp)
+		{
+			<span style="color:#66d9ef">if</span> (record.find(sta.first) <span style="color:#f92672">!=</span> record.end())
+				<span style="color:#66d9ef">continue</span>;
+			record.insert(sta.first);
+			<span style="color:#75715e">//judge_conflict(sta.second, conflict);
+</span><span style="color:#75715e"></span>
+			<span style="color:#75715e">//分析 构造ACTION-GOTO表
+</span><span style="color:#75715e"></span>
+			std<span style="color:#f92672">::</span>unordered_set<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> record_status;
+			<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> pros : sta.second)
+			{
+				<span style="color:#66d9ef">if</span> (G[pros.pro_num].right[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;ε&#34;</span> <span style="color:#f92672">||</span> pros.dot_position <span style="color:#f92672">==</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(G[pros.pro_num].right.size()))		<span style="color:#75715e">//文法产生式右端为ε 或者 项目已分析·到末尾
+</span><span style="color:#75715e"></span>				{
+					<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> sucess : pros.successors)
+					{
+						<span style="color:#75715e">//若项目[A→α·，a]属于Ik，则置ACTION[k, a]为 rj；
+</span><span style="color:#75715e"></span>						<span style="color:#66d9ef">if</span> (action[sta.first].find(sucess) <span style="color:#f92672">==</span> action[sta.first].end())
+							action[sta.first][sucess] <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;r&#34;</span> <span style="color:#f92672">+</span> std<span style="color:#f92672">::</span>to_string(pros.pro_num);
+					}
+					<span style="color:#66d9ef">continue</span>;
+				}
+				std<span style="color:#f92672">::</span>string trans <span style="color:#f92672">=</span> G[pros.pro_num].right[pros.dot_position];
+				<span style="color:#66d9ef">if</span> (record_status.find(trans) <span style="color:#f92672">!=</span> record_status.end())
+					<span style="color:#66d9ef">continue</span>;
+				record_status.insert(trans);
+				tmp_status.clear();
+				ptmp.pro_num <span style="color:#f92672">=</span> pros.pro_num;
+				ptmp.dot_position <span style="color:#f92672">=</span> pros.dot_position <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+				ptmp.successors <span style="color:#f92672">=</span> pros.successors;
+				tmp_status.insert(ptmp);
+				<span style="color:#75715e">//protmp.dot_position &lt; static_cast&lt;int&gt;(G[protmp.pro_num].right.size()) 
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> protmp : sta.second)
+				{
+					<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>(protmp <span style="color:#f92672">==</span> pros) <span style="color:#f92672">&amp;&amp;</span> G[protmp.pro_num].right[protmp.dot_position] <span style="color:#f92672">==</span> trans)
+					{
+						ptmp.pro_num <span style="color:#f92672">=</span> protmp.pro_num;
+						ptmp.dot_position <span style="color:#f92672">=</span> protmp.dot_position <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+						ptmp.successors <span style="color:#f92672">=</span> protmp.successors;
+						tmp_status.insert(ptmp);
+					}
+				}
+				get_closure(tmp_status);
+				<span style="color:#66d9ef">bool</span> flag <span style="color:#f92672">=</span> true;
+				<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> s : sstmp)
+				{
+					<span style="color:#66d9ef">if</span> (judge_repeat(s.second, tmp_status))
+					{
+						<span style="color:#66d9ef">if</span> (inVT(trans))
+							goTo[sta.first][trans] <span style="color:#f92672">=</span> s.first;
+						<span style="color:#66d9ef">else</span>	<span style="color:#75715e">//若项目[A→α·aβ, b]属于Ik且GO(Ik, a)＝Ij，a为终结符，则置ACTION[k, a]为 sj
+</span><span style="color:#75715e"></span>							action[sta.first][trans] <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;s&#34;</span> <span style="color:#f92672">+</span> std<span style="color:#f92672">::</span>to_string(s.first);
+						flag <span style="color:#f92672">=</span> false;
+						<span style="color:#66d9ef">break</span>;
+					}
+				}
+				<span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span>flag)
+					<span style="color:#66d9ef">continue</span>;
+				statuses.insert({ <span style="color:#f92672">++</span>t, tmp_status });
+				change <span style="color:#f92672">=</span> true;
+
+				<span style="color:#75715e">//填写goTo表和action表
+</span><span style="color:#75715e"></span>				<span style="color:#66d9ef">if</span> (inVT(trans))
+					goTo[sta.first][trans] <span style="color:#f92672">=</span> t;
+				<span style="color:#66d9ef">else</span>
+					action[sta.first][trans] <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;s&#34;</span> <span style="color:#f92672">+</span> std<span style="color:#f92672">::</span>to_string(t);
+			}
+		}
+	}
+	<span style="color:#75715e">//添加acc
+</span><span style="color:#75715e"></span>	action[goTo[<span style="color:#ae81ff">0</span>][<span style="color:#e6db74">&#34;Program&#34;</span>]][<span style="color:#e6db74">&#34;#&#34;</span>] <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;acc&#34;</span>;
+}
+
+<span style="color:#66d9ef">void</span> GetTable<span style="color:#f92672">::</span>print(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> o1, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> o2)
+{
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> f1 : action)
+	{
+		<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> f2 : f1.second)
+            o1 <span style="color:#f92672">&lt;&lt;</span> f1.first <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> f2.first <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> f2.second <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+	}
+
+	<span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> f1 : goTo)
+	{
+        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> f2 : f1.second)
+            o2 <span style="color:#f92672">&lt;&lt;</span> f1.first <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> f2.first <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> f2.second <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+    }
+}
+
+<span style="color:#75715e">//int main()
+</span><span style="color:#75715e">//{
+</span><span style="color:#75715e">//	GetTable test;
+</span><span style="color:#75715e">//	std::ifstream gin(&#34;grammer.txt&#34;);
+</span><span style="color:#75715e">//	std::ofstream action(&#34;action.out&#34;);
+</span><span style="color:#75715e">//	std::ofstream goTo(&#34;goto.out&#34;);
+</span><span style="color:#75715e">//	test.get_grammer(gin);
+</span><span style="color:#75715e">//	test.get_first();
+</span><span style="color:#75715e">//	test.get_follow();
+</span><span style="color:#75715e">//	test.get_status();
+</span><span style="color:#75715e">//	test.print(action, goTo);
+</span><span style="color:#75715e">//
+</span><span style="color:#75715e">//	gin.close();
+</span><span style="color:#75715e">//	action.close();
+</span><span style="color:#75715e">//	goTo.close();
+</span><span style="color:#75715e">//	return 0;
+</span><span style="color:#75715e">//}
+</span></code></pre></div><hr>
+<h2 id="语法分析---parser">语法分析 - Parser</h2>
+<p>  语法分析部分是一个使用 LR(1)分析方法的类 C 语言分析程序，可以根据已知的类 C 语言文法，由程序自动生成该文法的 ACTION 表和 GOTO 表以进行 LR 分析。语法分析器的使用过程中可以根据词法分析器的生成结果正确判断是否是属于本文法的句子，并给出分析过程，最后使用 UI 界面输出相应的语法树。</p>
+<p>  流程图如下：
+<img src="../../img/compiler_parser/Parser_flow.jpg" alt="Parser_flow"></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.h
+</span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;fstream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;sstream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iostream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;iomanip&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;string&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;algorithm&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;unordered_set&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;vector&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;stack&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;myLexer.h&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;getTable.h&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;QFile&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e">#include</span> <span style="color:#75715e">&lt;QTextStream&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">PTnode</span> {
+    std<span style="color:#f92672">::</span>string name;
+	<span style="color:#66d9ef">int</span> parent;
+	std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> child;
+    std<span style="color:#f92672">::</span>string s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+
+	<span style="color:#66d9ef">bool</span> <span style="color:#66d9ef">operator</span> <span style="color:#f92672">==</span>(<span style="color:#66d9ef">const</span> PTnode<span style="color:#f92672">&amp;</span> x) <span style="color:#66d9ef">const</span> {
+		<span style="color:#66d9ef">if</span> (<span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>name <span style="color:#f92672">==</span> x.name <span style="color:#f92672">&amp;&amp;</span> <span style="color:#66d9ef">this</span><span style="color:#f92672">-&gt;</span>parent <span style="color:#f92672">==</span> x.parent) {
+			<span style="color:#66d9ef">return</span> true;
+		} <span style="color:#66d9ef">else</span> {
+			<span style="color:#66d9ef">return</span> false;
+		}
+	}
+}PTnode;
+
+<span style="color:#66d9ef">typedef</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">PTree</span> {
+	std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>PTnode<span style="color:#f92672">&gt;</span> treeNodes;
+	<span style="color:#66d9ef">int</span> root;
+}PTree;
+
+<span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Parser</span> {
+<span style="color:#66d9ef">private</span><span style="color:#f92672">:</span>
+    GetTable table;
+<span style="color:#66d9ef">public</span><span style="color:#f92672">:</span>
+    PTree syntaxTree;
+    Parser() { syntaxTree.root <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; };
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">getTable</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outAction, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outGoto);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">initTable</span>(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inAction, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGoto);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">printStatus</span>(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out, <span style="color:#66d9ef">int</span> rank, std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;&amp;</span> status, std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> symbol, std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>Word<span style="color:#f92672">&gt;</span> sentence, <span style="color:#66d9ef">int</span> loc);
+    <span style="color:#66d9ef">bool</span> <span style="color:#a6e22e">stack_parser</span>(std<span style="color:#f92672">::</span>istringstream <span style="color:#f92672">&amp;</span>in, std<span style="color:#f92672">::</span>ofstream <span style="color:#f92672">&amp;</span>out);
+<span style="color:#75715e">//		void run();
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">printSpace</span>(std<span style="color:#f92672">::</span>ofstream <span style="color:#f92672">&amp;</span>out, <span style="color:#66d9ef">int</span> num);
+    <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">printSyntaxTree</span>(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out);
+};
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c++" data-lang="c++"><span style="color:#75715e">//Parser.cpp
+</span><span style="color:#75715e"></span><span style="color:#75715e">#include</span> <span style="color:#75715e">&#34;Parser.h&#34;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>getTable(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outAction, std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> outGoto) {
+
+    table.get_grammer(inGrammar);
+    table.get_first();
+    table.get_follow();
+    table.get_status();
+    table.print(outAction, outGoto);
+}
+
+<span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>initTable(std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGrammar, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inAction, std<span style="color:#f92672">::</span>ifstream<span style="color:#f92672">&amp;</span> inGoto){
+    table.initTable(inGrammar, inAction, inGoto);
+}
+
+<span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>printStatus(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out, <span style="color:#66d9ef">int</span> rank, std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;&amp;</span> status,
+    std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;&amp;</span> symbol, std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>Word<span style="color:#f92672">&gt;</span> sentence, <span style="color:#66d9ef">int</span> loc) {
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setiosflags(std<span style="color:#f92672">::</span>ios<span style="color:#f92672">::</span>left);
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">10</span>) <span style="color:#f92672">&lt;&lt;</span> rank;
+
+    out <span style="color:#f92672">&lt;&lt;</span> rank;
+    <span style="color:#66d9ef">if</span> (rank <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">10</span>) {
+        printSpace(out, <span style="color:#ae81ff">20</span> <span style="color:#f92672">-</span> <span style="color:#ae81ff">2</span>);
+    }
+    <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (rank <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">100</span>) {
+        printSpace(out, <span style="color:#ae81ff">20</span> <span style="color:#f92672">-</span> <span style="color:#ae81ff">4</span>);
+    }
+    <span style="color:#66d9ef">else</span> {
+        printSpace(out, <span style="color:#ae81ff">20</span> <span style="color:#f92672">-</span> <span style="color:#ae81ff">6</span>);
+    }
+    std<span style="color:#f92672">::</span>string s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+    std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> help1;
+    <span style="color:#66d9ef">int</span> count <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>status.empty()) {
+        <span style="color:#66d9ef">int</span> num <span style="color:#f92672">=</span> status.top();
+        status.pop();
+        s <span style="color:#f92672">=</span> std<span style="color:#f92672">::</span>to_string(num) <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39; &#39;</span> <span style="color:#f92672">+</span> s;
+        help1.push(num);
+        count <span style="color:#f92672">+=</span> std<span style="color:#f92672">::</span>to_string(num).length() <span style="color:#f92672">*</span> <span style="color:#ae81ff">2</span> <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+    }
+    <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>help1.empty()) {
+        <span style="color:#66d9ef">int</span> num <span style="color:#f92672">=</span> help1.top();
+        help1.pop();
+        status.push(num);
+    }
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">150</span>) <span style="color:#f92672">&lt;&lt;</span> s;
+    out <span style="color:#f92672">&lt;&lt;</span> s;
+    printSpace(out, <span style="color:#ae81ff">400</span> <span style="color:#f92672">-</span> count);
+
+    s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+    count <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+    std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> help2;
+    <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>symbol.empty()) {
+        std<span style="color:#f92672">::</span>string top <span style="color:#f92672">=</span> symbol.top();
+        symbol.pop();
+        s <span style="color:#f92672">=</span> top <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">+</span> s;
+        help2.push(top);
+        count <span style="color:#f92672">+=</span> top.length() <span style="color:#f92672">*</span> <span style="color:#ae81ff">2</span> <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>;
+    }
+    <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>help2.empty()) {
+        std<span style="color:#f92672">::</span>string num <span style="color:#f92672">=</span> help2.top();
+        help2.pop();
+        symbol.push(num);
+    }
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">150</span>) <span style="color:#f92672">&lt;&lt;</span> s;
+    out <span style="color:#f92672">&lt;&lt;</span> s;
+    printSpace(out, <span style="color:#ae81ff">400</span> <span style="color:#f92672">-</span> count);
+
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> loc; i <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(sentence.size()); i<span style="color:#f92672">++</span>) {
+        std<span style="color:#f92672">::</span>string s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+        <span style="color:#66d9ef">if</span> (sentence[i].getTag() <span style="color:#f92672">==</span> <span style="color:#ae81ff">98</span>)
+            s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Num&#34;</span>;
+        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (sentence[i].getTag() <span style="color:#f92672">==</span> <span style="color:#ae81ff">99</span>)
+            s <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Identifier&#34;</span>;
+        <span style="color:#66d9ef">else</span>
+            s <span style="color:#f92672">=</span> sentence[i].getLexeme();
+        std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> s <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span>;
+        out <span style="color:#f92672">&lt;&lt;</span> s <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span>;
+    }
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+    out <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+}
+
+<span style="color:#66d9ef">bool</span> Parser<span style="color:#f92672">::</span>stack_parser(std<span style="color:#f92672">::</span>istringstream <span style="color:#f92672">&amp;</span>in, std<span style="color:#f92672">::</span>ofstream <span style="color:#f92672">&amp;</span>out) {
+    Lexer mylex;
+    std<span style="color:#f92672">::</span>cout<span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setiosflags(std<span style="color:#f92672">::</span>ios<span style="color:#f92672">::</span>left);
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">10</span>) <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;步骤&#34;</span>;
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">150</span>) <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;状态&#34;</span>;
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>setw(<span style="color:#ae81ff">150</span>) <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;符号&#34;</span>;
+    std<span style="color:#f92672">::</span>cout <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;输入串&#34;</span> <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+
+    out <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;步骤&#34;</span>;
+    printSpace(out, <span style="color:#ae81ff">12</span>);
+    out <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;状态&#34;</span>;
+    printSpace(out, <span style="color:#ae81ff">392</span>);
+    out <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;符号&#34;</span>;
+    printSpace(out, <span style="color:#ae81ff">392</span>);
+    out <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;输入串&#34;</span> <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span>Word<span style="color:#f92672">&gt;</span> fileResource;
+    <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span>in.eof()) {
+        fileResource.push_back(mylex.scan(in));
+    }
+    std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> statusStack;
+    std<span style="color:#f92672">::</span>stack<span style="color:#f92672">&lt;</span>std<span style="color:#f92672">::</span>string<span style="color:#f92672">&gt;</span> symbolStack;
+    statusStack.push(<span style="color:#ae81ff">0</span>);
+    symbolStack.push(<span style="color:#e6db74">&#34;#&#34;</span>);
+    <span style="color:#66d9ef">int</span> loc <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>, rank <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+    std<span style="color:#f92672">::</span>string left <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>, right <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+
+    <span style="color:#66d9ef">while</span>(<span style="color:#ae81ff">1</span>) {
+        printStatus(out, rank<span style="color:#f92672">++</span>, statusStack, symbolStack, fileResource, loc);
+        Word w <span style="color:#f92672">=</span> fileResource[loc];
+        <span style="color:#66d9ef">int</span> top <span style="color:#f92672">=</span> statusStack.top();
+        std<span style="color:#f92672">::</span>string T;
+        <span style="color:#66d9ef">int</span> flag <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+        <span style="color:#66d9ef">if</span> (w.getTag() <span style="color:#f92672">==</span> Tag<span style="color:#f92672">::</span>NUM){
+            T <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Num&#34;</span>;
+            flag <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+        }
+        <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span> (w.getTag() <span style="color:#f92672">==</span> Tag<span style="color:#f92672">::</span>ID){
+            T <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;Identifier&#34;</span>;
+            flag <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>;
+        }
+        <span style="color:#66d9ef">else</span>
+            T <span style="color:#f92672">=</span> w.getLexeme();
+        <span style="color:#66d9ef">if</span>(table.action[top].find(T) <span style="color:#f92672">==</span> table.action[top].end())
+            <span style="color:#66d9ef">return</span> false;
+        std<span style="color:#f92672">::</span>string act <span style="color:#f92672">=</span> table.action[top][T];
+        <span style="color:#66d9ef">if</span>(act[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;s&#39;</span>) {
+            loc<span style="color:#f92672">++</span>;
+            statusStack.push(std<span style="color:#f92672">::</span>atoi(<span style="color:#f92672">&amp;</span>act[<span style="color:#ae81ff">1</span>]));
+            symbolStack.push(T);
+            std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> temp;
+            <span style="color:#66d9ef">if</span>(<span style="color:#f92672">!</span>flag){
+                PTnode insert;
+                insert.name<span style="color:#f92672">=</span> T;
+                insert.parent<span style="color:#f92672">=-</span><span style="color:#ae81ff">2</span>;       <span style="color:#75715e">//-2表示父结点待计算    -1表示无父结点
+</span><span style="color:#75715e"></span>                insert.child<span style="color:#f92672">=</span>temp;
+                insert.s<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>;
+                syntaxTree.treeNodes.push_back(insert);
+            }
+            <span style="color:#66d9ef">else</span>{
+                PTnode insert;
+                insert.name<span style="color:#f92672">=</span> T;
+                insert.parent<span style="color:#f92672">=-</span><span style="color:#ae81ff">2</span>;
+                insert.child<span style="color:#f92672">=</span>temp;
+                insert.s<span style="color:#f92672">=</span>w.getLexeme();
+                syntaxTree.treeNodes.push_back(insert);
+            }
+        } <span style="color:#66d9ef">else</span> <span style="color:#a6e22e">if</span>(act[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">==</span> <span style="color:#e6db74">&#39;r&#39;</span>) {
+            <span style="color:#66d9ef">int</span> status <span style="color:#f92672">=</span> std<span style="color:#f92672">::</span>atoi(<span style="color:#f92672">&amp;</span>act[<span style="color:#ae81ff">1</span>]);
+            <span style="color:#66d9ef">int</span> count <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(table.G[status].right.size());
+            std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> child;
+            PTnode insert;
+            insert.name<span style="color:#f92672">=</span> table.G[status].left;
+            insert.parent<span style="color:#f92672">=-</span><span style="color:#ae81ff">2</span>;
+            insert.child<span style="color:#f92672">=</span>child;
+            insert.s<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>;
+            syntaxTree.treeNodes.push_back(insert);
+
+            <span style="color:#66d9ef">int</span> parentIndex <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size()) <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>;
+
+            <span style="color:#66d9ef">if</span> (count <span style="color:#f92672">==</span> <span style="color:#ae81ff">1</span> <span style="color:#f92672">&amp;&amp;</span> table.G[status].right[<span style="color:#ae81ff">0</span>] <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;ε&#34;</span>) {
+                count <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+            }
+            <span style="color:#66d9ef">while</span> (count <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>) {
+                std<span style="color:#f92672">::</span>string name <span style="color:#f92672">=</span> symbolStack.top();
+                <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size()) <span style="color:#f92672">-</span> <span style="color:#ae81ff">2</span>; i <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0</span>; i<span style="color:#f92672">--</span>) {
+                    <span style="color:#66d9ef">if</span> (syntaxTree.treeNodes[i].name <span style="color:#f92672">==</span> name and syntaxTree.treeNodes[i].parent <span style="color:#f92672">==</span> <span style="color:#f92672">-</span><span style="color:#ae81ff">2</span>) {
+                        syntaxTree.treeNodes[i].parent <span style="color:#f92672">=</span> parentIndex;
+                        syntaxTree.treeNodes[<span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size()) <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>].child.push_back(i);
+                        <span style="color:#66d9ef">break</span>;
+                    }
+                }
+                symbolStack.pop();
+                statusStack.pop();
+                count<span style="color:#f92672">--</span>;
+            }
+            <span style="color:#66d9ef">int</span> top <span style="color:#f92672">=</span> statusStack.top();
+            symbolStack.push(table.G[status].left);
+            statusStack.push(table.goTo[top][table.G[status].left]);
+        } <span style="color:#66d9ef">else</span> {
+            <span style="color:#66d9ef">return</span> true;
+        }
+    }
+    <span style="color:#66d9ef">return</span> false;
+}
+
+<span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>printSpace(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out, <span style="color:#66d9ef">int</span> num) {
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> num; i<span style="color:#f92672">++</span>) {
+        out <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span>;
+    }
+}
+
+<span style="color:#66d9ef">void</span> Parser<span style="color:#f92672">::</span>printSyntaxTree(std<span style="color:#f92672">::</span>ofstream<span style="color:#f92672">&amp;</span> out) {
+    std<span style="color:#f92672">::</span>vector<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span> temp;
+    syntaxTree.treeNodes[<span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size()) <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>].parent <span style="color:#f92672">=</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size());
+
+    PTnode insert;
+    insert.name<span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;S&#34;</span>;
+    insert.parent<span style="color:#f92672">=-</span><span style="color:#ae81ff">1</span>;
+    insert.child<span style="color:#f92672">=</span>temp;
+    insert.s<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;</span>;
+    syntaxTree.treeNodes.push_back(insert);
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; i <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">static_cast</span><span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</span><span style="color:#f92672">&gt;</span>(syntaxTree.treeNodes.size()); i<span style="color:#f92672">++</span>) {
+        out <span style="color:#f92672">&lt;&lt;</span> i <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> syntaxTree.treeNodes[i].name <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34; &#34;</span> <span style="color:#f92672">&lt;&lt;</span> syntaxTree.treeNodes[i].parent<span style="color:#f92672">&lt;&lt;</span><span style="color:#e6db74">&#34; &#34;</span>;
+        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">auto</span> v : syntaxTree.treeNodes[i].child) {
+            out <span style="color:#f92672">&lt;&lt;</span> v <span style="color:#f92672">&lt;&lt;</span> <span style="color:#e6db74">&#34;,&#34;</span>;
+        }
+        out <span style="color:#f92672">&lt;&lt;</span> std<span style="color:#f92672">::</span>endl;
+    }
+}
+
+<span style="color:#75715e">//void Parser::run() {
+</span><span style="color:#75715e">//	std::ifstream lin(&#34;test.txt&#34;);
+</span><span style="color:#75715e">//	std::ofstream parser(&#34;parser.out&#34;);
+</span><span style="color:#75715e">//	std::ofstream tree(&#34;syntaxTree.out&#34;);
+</span><span style="color:#75715e">//	getTable();
+</span><span style="color:#75715e">//	std::cout &lt;&lt; &#34;ACTION表、GOTO表构造完成，接下来显示规约过程&#34; &lt;&lt; std::endl;
+</span><span style="color:#75715e">//	stack_parser(lin, parser);
+</span><span style="color:#75715e">//	std::cout &lt;&lt; &#34;语法分析完成，正在构造语法树&#34; &lt;&lt; std::endl;
+</span><span style="color:#75715e">//	printSyntaxTree(tree);
+</span><span style="color:#75715e">//	std::cout &lt;&lt; &#34;语法树构造完成&#34; &lt;&lt; std::endl;
+</span><span style="color:#75715e">//	lin.close();
+</span><span style="color:#75715e">//	parser.close();
+</span><span style="color:#75715e">//	tree.close();
+</span><span style="color:#75715e">//}
+</span></code></pre></div><p>参考博客：</p>
+<p><a href="https://www.cnblogs.com/vachester/p/6884350.html">https://www.cnblogs.com/vachester/p/6884350.html</a></p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

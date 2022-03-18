@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Java并发编程学习笔记-02 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+</head>
+
+  <body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Java并发编程学习笔记-02</h1>
+  <time datetime=2021-10-10T17:33:08&#43;0800 class="post-date">Sun, Oct 10, 2021</time>
+  <p>本文为学习 Java 并发编程的一些随笔 <em>Part 2</em>，记录我所认为的一些重要 or 有趣的点。</p>
+<p>此部分主要是关于 <em>Java</em> 实战的一些探讨。</p>
+<p>参考书籍：<em>Java Concurrency in Practice</em> 《Java并发编程实战》</p>
+<h1 id="构建基础模块">构建基础模块</h1>
+<h2 id="同步容器类">同步容器类</h2>
+<p>包括 <em>Vector</em> 和 <em>HashTable</em> 以及一些功能类似的类，这些同步的封装器类是由 <em>Collections.synchronizedXxx</em> 等工厂方法创建的，其实现线程安全的方式是：将它们的状态封装起来，并对每个公有方法都进行同步，使得每次只有一个线程能访问容器的状态。</p>
+<h3 id="同步容器类的问题">同步容器类的问题</h3>
+<p>同步容器类虽然都是线程安全的，但在某些情况下可能需要额外的客户端加锁来保护复合操作，常见符合操作包括：迭代、跳转（根据指定顺序找到当前元素的下一个元素）以及条件运算。</p>
+<h3 id="迭代器与concurrentmodificationexception">迭代器与ConcurrentModificationException</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java">List<span style="color:#f92672">&lt;</span>Widget<span style="color:#f92672">&gt;</span> widgetList <span style="color:#f92672">=</span> Collections<span style="color:#f92672">.</span><span style="color:#a6e22e">synchronizedList</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> ArrayList<span style="color:#f92672">&lt;</span>Widget<span style="color:#f92672">&gt;());</span>
+<span style="color:#f92672">...</span>
+<span style="color:#75715e">// 可能抛出 ConcurrentModificationException
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span>Widget w <span style="color:#f92672">:</span> widgetList<span style="color:#f92672">)</span>
+    doSomething<span style="color:#f92672">(</span>w<span style="color:#f92672">);</span>
+</code></pre></div><p>如果在迭代期间计数器被修改，那么 <em>hasNext</em> 和 <em>next</em> 将抛出 <em><strong>ConcurrentModificationException</strong></em>。然而，这种检查是在没有同步的情况下进行的，因此可能会看到失效的计数值，而迭代器可能并没有意识到已经发生了修改。这是一种设计上的权衡，从而降低并发修改操作的检测代码对程序性能带来的影响。</p>
+<h3 id="隐藏迭代器">隐藏迭代器</h3>
+<p>在某些情况下，迭代器会隐藏起来。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">HiddenIterator</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Set<span style="color:#f92672">&lt;</span>Integer<span style="color:#f92672">&gt;</span> set <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> HashSet<span style="color:#f92672">&lt;</span>Integer<span style="color:#f92672">&gt;();</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>Integer i<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        set<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>    
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">synchronized</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>Integer i<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        set<span style="color:#f92672">.</span><span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>i<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">addTenThings</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        Random r <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Random<span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> i <span style="color:#f92672">&lt;</span> 10<span style="color:#f92672">;</span> i<span style="color:#f92672">++)</span> <span style="color:#f92672">{</span>
+            add<span style="color:#f92672">(</span>r<span style="color:#f92672">.</span><span style="color:#a6e22e">nextInt</span><span style="color:#f92672">());</span>
+        <span style="color:#f92672">}</span>
+        System<span style="color:#f92672">.</span><span style="color:#a6e22e">out</span><span style="color:#f92672">.</span><span style="color:#a6e22e">println</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;DEBUG: added ten elements to &#34;</span> <span style="color:#f92672">+</span> set<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>字符串的连接操作转换为调用 <em>StringBuilder.append(Object)</em>，而这个方法又会调用容器的 <em>toString</em> 方法，标准容器的 <em>toString</em> 方法将迭代容器。</p>
+<h2 id="并发容器">并发容器</h2>
+<h3 id="concurrenthashmap">ConcurrentHashMap</h3>
+<p><em>ConcurrentHashMap</em> 并不是将每个方法都在同一个锁上进行同步并使得每次只能有一个线程访问容器，而是使用一种粒度更细的加锁机制来实现更大程度的共享，这种机制成称为分段锁（<em>Lock Striping</em>）。在这种机制中，<strong>任意数量的读取线程</strong>可以并发地访问 <em>Map</em>，并且<strong>一定数量的写入线程</strong>可以并发地修改 <em>Map</em>。其在并发访问环境下可以实现更高的吞吐量，而在单线程环境中只损失非常小的性能。</p>
+<p><em>ConcurrentHashMap</em> 提供的迭代器不会抛出 <em>ConcurrentModificationException</em>，因此不需要在迭代过程中对容器加锁。<em>ConcurrentHashMap</em> 返回的迭代器具有弱一致性（<em>Weakly Consistent</em>），而并非“及时失败”。弱一致性的迭代器可以容忍并发的修改，当创建迭代器时会遍历已有的元素，并可以（但不保证）在迭代器被构造后将修改操作反映给容器。</p>
+<p>PS：<em>ConcurrentHashMap</em> 虽然不能被加锁来执行独占访问，但一些常见的符合操作都已经实现为原子操作并在 <em>ConcurrentMap</em> 接口中声明，如下所示：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">ConcurrentMap</span><span style="color:#f92672">&lt;</span>K<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> <span style="color:#66d9ef">extends</span> Map<span style="color:#f92672">&lt;</span>K<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#75715e">// 仅当K没有相应的映射值时才插入
+</span><span style="color:#75715e"></span>    V <span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>K key<span style="color:#f92672">,</span> V value<span style="color:#f92672">);</span>
+    
+    <span style="color:#75715e">// 仅当K被映射到V时才移除
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>K key<span style="color:#f92672">,</span> V value<span style="color:#f92672">);</span>
+    
+    <span style="color:#75715e">// 仅当K被映射到oldValue时才替换为newValue
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">replace</span><span style="color:#f92672">(</span>K key<span style="color:#f92672">,</span> V oldValue<span style="color:#f92672">,</span> V newValue<span style="color:#f92672">);</span>
+    
+    <span style="color:#75715e">// 仅当K被映射到某个值时才替换为newValue
+</span><span style="color:#75715e"></span>    V <span style="color:#a6e22e">replace</span><span style="color:#f92672">(</span>K key<span style="color:#f92672">,</span> V value<span style="color:#f92672">);</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="copyonwritearraylist">CopyOnWriteArrayList</h3>
+<p><em>CopyOnWriteArrayList</em> 替代同步 <em>List</em>，“写入即复制（<em>Copy-On-Wirte</em>）”容器的线程安全性在于，只要正确地发布一个事实不可变的对象，那么在访问该对象时就不需要进一步的同步。在每次修改时，都会创建并重新发布一个新的容器副本。</p>
+<p>显然，每当修改容器时都会复制底层数组，这需要一定的开销，特别是当容器的规模较大时。仅当迭代操作远远多于修改操作时，才应该使用 <em>Copy-On-Wirte</em> 容器。</p>
+<h2 id="阻塞队列和生产者-消费者模式">阻塞队列和生产者-消费者模式</h2>
+<p>阻塞队列提供了可阻塞的 <em>put</em> 和 <em>take</em> 方法，以及支持定时的 <em>offer</em> 和 <em>poll</em> 方法。如果队列已经满了，那么 <em>put</em> 方法将阻塞直到有空间可用；如果队列为空，那么 <em>take</em> 方法将会阻塞直到有元素可用。</p>
+<p>阻塞队列支持生产者-消费者这种设计模式。</p>
+<p><em>BlockingQueue</em> 简化了生产者-消费者设计的实现过程，支持任意数量的生产者和消费者。一种最常见的生产者-消费者设计模式就是线程池与工作队列的组合。</p>
+<p>阻塞队列也提供了一个 <em>offer</em> 方法，如果数据项不能被添加到队列中，那么将返回一个失败状态。这样你就能创建更多灵活的策略来处理负荷过载的情况，例如减轻负载、将多余的工作项序列化并写入磁盘、减少生产者线程的数量、通过某种方式来抑制生产者线程。</p>
+<blockquote>
+<p>在构建高可靠的应用程序时，有界队列是一种强大的资源管理工具：它们能抑制并防止产生过多的工作项，使应用程序在负荷过在的情况下变得更加健壮。</p>
+</blockquote>
+<p>虽然生产者-消费者模式能够将生产者和消费者的代码彼此解耦开来，但它们的行为仍然会通过共享工作队列间接地耦合在一起。开发人员总会假设消费者处理工作的速率能高赶上生产者生成工作项的速率，因此通常不会为工作队列的大小设置边界，但这将导致在之后需要重新设计系统架构。</p>
+<p>在类库中包含了 <em>BlockingQueue</em> 的多种实现，其中 <em>LinkedBlocingQueue</em> 和 <em>ArrayBlocingQueue</em> 是FIFO队列，二者分别与 <em>LinkedList</em> 和 <em>ArrayList</em> 类似，但比同步 <em>List</em> 有更好的并发性能； <em>PriorityBlockingQueue</em> 是一个按优先级排序的队列，可以按照某种排序来处理元素而不是FIFO，可以根据元素的自然顺序来比较元素（如果实现了 <em>Comparable</em> 方法）或者使用 <em>Comparator</em> 来比较；而 <em>SynchronousQueue</em> 实际上不是一个真正的队列，不会为队列中的元素维护存储空间。它维护一组线程，这些线程在等待着把元素加入或移出队列。这种方式可以直接交付工作，从而降低了将数据从生产者移动到消费者的延迟，并且当交付被接受时，它就知道消费者已经得到了任务，而不是简单地把任务放入一个队列。</p>
+<h3 id="示例桌面搜索">示例：桌面搜索</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">FileCrawler</span> <span style="color:#66d9ef">implements</span> Runnable<span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> BlockingQueue<span style="color:#f92672">&lt;</span>File<span style="color:#f92672">&gt;</span> fileQueue<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> FileFilter fileFilter<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> File root<span style="color:#f92672">;</span>
+    
+    <span style="color:#75715e">//...
+</span><span style="color:#75715e"></span>    
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            crawl<span style="color:#f92672">(</span>root<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>InterruptedException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            Thread<span style="color:#f92672">.</span><span style="color:#a6e22e">currentThread</span><span style="color:#f92672">().</span><span style="color:#a6e22e">interrupt</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">crawl</span><span style="color:#f92672">(</span>File root<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> InterruptedException <span style="color:#f92672">{</span>
+        File<span style="color:#f92672">[]</span> entries <span style="color:#f92672">=</span> root<span style="color:#f92672">.</span><span style="color:#a6e22e">listFiles</span><span style="color:#f92672">(</span>fileFilter<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">null</span> <span style="color:#f92672">!=</span> entries<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span>File entry <span style="color:#f92672">:</span> entries<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>entry<span style="color:#f92672">.</span><span style="color:#a6e22e">isDirectory</span><span style="color:#f92672">())</span> <span style="color:#f92672">{</span>
+                    crawl<span style="color:#f92672">(</span>entry<span style="color:#f92672">);</span>
+                <span style="color:#f92672">}</span> <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> <span style="color:#f92672">(!</span>alreadyIndexed<span style="color:#f92672">(</span>entry<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+                    fileQueue<span style="color:#f92672">.</span><span style="color:#a6e22e">put</span><span style="color:#f92672">(</span>entry<span style="color:#f92672">);</span>
+                <span style="color:#f92672">}</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+
+
+
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Indexer</span> <span style="color:#66d9ef">implements</span> Runnable <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> BlockingQueue<span style="color:#f92672">&lt;</span>File<span style="color:#f92672">&gt;</span> queue<span style="color:#f92672">;</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">Indexer</span><span style="color:#f92672">(</span>BlockingQueue<span style="color:#f92672">&lt;</span>File<span style="color:#f92672">&gt;</span> queue<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">queue</span> <span style="color:#f92672">=</span> queue<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">while</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">true</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                indexFile<span style="color:#f92672">(</span>queue<span style="color:#f92672">.</span><span style="color:#a6e22e">take</span><span style="color:#f92672">());</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>InterruptedException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            Thread<span style="color:#f92672">.</span><span style="color:#a6e22e">currentThread</span><span style="color:#f92672">().</span><span style="color:#a6e22e">interrupt</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>生产者-消费者模式提供了一种适合线程的方法将桌面搜索问题分解为更简单的组件。将文件遍历与建立索引等功能<strong>分解为独立的操作</strong>，这比把所有功能都放到一个操作实现有着更高的代码可读性和可重用性：每个操作只需完成一个任务，并且阻塞队列将负责所有的控制流，因此每个功能的代码都更加简单和清晰。</p>
+<p>生产者-消费者模式同样能带来许多性能优势。生产者和消费者可以并发的执行。如果生产者和消费者一个是I/O密集型，一个是CPU密集型，那么<strong>并发执行的吞吐率要高于串行执行的吞吐率</strong>。如果生产者和消费者的并行度不同，那么将它们耦合在一起会把整体并行度<strong>降低成</strong>二者中更小的并行度。</p>
+<h2 id="阻塞方法与中断方法">阻塞方法与中断方法</h2>
+<p>线程可能会阻塞或暂停执行，原因有多种：</p>
+<ul>
+<li>等到 I/O 操作结束</li>
+<li>等待获得一个锁</li>
+<li>等待从 <em>Thread.sleep</em> 方法中醒来</li>
+<li>等待另一个线程的计算结果</li>
+</ul>
+<p>Java 中当某方法抛出 <em>InterruptedException</em> 时，表示该方法是一个阻塞方法，如果这个方法被中断，那么它将努力提前结束阻塞状态。</p>
+<p>Thread 提供了 <em>interrupt</em> 方法，用于中断线程或者查询线程是否已经被中断。每个线程都有一个布尔类型的属性，表示线程的中断状态，当中断线程时将设置这个状态。</p>
+<p>中断是一种协作机制。<strong>一个线程不能强制其他线程停止正在执行的操作而去执行其他的操作</strong>。当线程A中断线程B时，A只是要求B在执行到某个可以暂停的地方停止正在执行的操作（前提是B愿意停下来）。方法对中断请求的响应度越高，就越容易及时取消那些执行时间很长的操作。</p>
+<p>当调用一个会抛出 <em>InterruptedException</em> 异常的方法时，调用方的方法也会变成一个阻塞方法，并且必须要处理对中断的响应。对于库代码，有两种基本选择：</p>
+<ul>
+<li>传递 <em>InterruptedException</em>。直接继续抛出异常给调用者或者在捕获异常后进行简单的清理工作后再次抛出。</li>
+<li>恢复中断。有时不能抛出 <em>InterruptedException</em>，例如代码是 <em>Runable</em> 的一部分。例如：</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">TaskRunnable</span> <span style="color:#66d9ef">implements</span> Runnable <span style="color:#f92672">{</span>
+    BlockingQueue<span style="color:#f92672">&lt;</span>Task<span style="color:#f92672">&gt;</span> queue<span style="color:#f92672">;</span>
+    <span style="color:#75715e">// ...
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            processTask<span style="color:#f92672">(</span>queue<span style="color:#f92672">.</span><span style="color:#a6e22e">take</span><span style="color:#f92672">());</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>InterruptedException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#75715e">// 恢复被中断的状态
+</span><span style="color:#75715e"></span>            Thread<span style="color:#f92672">.</span><span style="color:#a6e22e">currentThread</span><span style="color:#f92672">().</span><span style="color:#a6e22e">interrupt</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>在出现 <em>InterruptedException</em> 时不应该做的事情是捕获它但不做出任何响应。这将导致调用栈上更高层的代码无法对中断采取处理措施（因为无法感知线程被中断）。</p>
+<h2 id="同步工具类">同步工具类</h2>
+<p>同步工具类可以根据自身的状态来协调线程的控制流。除了阻塞队列，其他类型的同步工具类还包括信号量（Semaphore）、栅栏（Barrier）以及闭锁（Latch）。</p>
+<p>所有的同步工具类都包含一些特定的结构化属性：它们封装了一些状态，这些状态将决定执行同步工具类的线程是继续执行还是等待，此外还提供了一些方法对状态进行操作，以及另一些方法用于高效地等待同步工具类进入到预期状态。</p>
+<h3 id="闭锁">闭锁</h3>
+<p>闭锁可以延迟线程的进度直到其达到终止状态。闭锁可以用来确保某些活动直到其他活动都完成后才继续执行，例如：</p>
+<ul>
+<li>确保某个计算在所有资源都被初始化之后才继续执行。</li>
+<li>确保某个服务在其依赖的所有其他服务都已经启动之后才启动。</li>
+<li>等待直到某个操作的所有参与者都就绪再继续执行。</li>
+</ul>
+<p><em>CountDownLatch</em> 是一种灵活的闭锁实现，适用于上述各种情况。</p>
+<p>e.g. 测试n个线程并发执行某个任务时需要的时间。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">TestHarness</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">long</span> <span style="color:#a6e22e">timeTasks</span><span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> nThreads<span style="color:#f92672">,</span> <span style="color:#66d9ef">final</span> Runnable task<span style="color:#f92672">)</span>
+        <span style="color:#66d9ef">throws</span> InterruptedException <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">final</span> CountDownLatch startGate <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> CountDownLatch<span style="color:#f92672">(</span>1<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">final</span> CountDownLatch endGate <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> CountDownLatch<span style="color:#f92672">(</span>nThreads<span style="color:#f92672">);</span>
+        
+        <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> i <span style="color:#f92672">&lt;</span> nThreads<span style="color:#f92672">;</span> <span style="color:#f92672">++</span>i<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            Thread t <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Thread<span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+                        startGate<span style="color:#f92672">.</span><span style="color:#a6e22e">await</span><span style="color:#f92672">();</span>
+                        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+                            task<span style="color:#f92672">.</span><span style="color:#a6e22e">run</span><span style="color:#f92672">();</span>
+                        <span style="color:#f92672">}</span> <span style="color:#66d9ef">finally</span> <span style="color:#f92672">{</span>
+                            endGate<span style="color:#f92672">.</span><span style="color:#a6e22e">countDown</span><span style="color:#f92672">();</span>
+                        <span style="color:#f92672">}</span>
+                    <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>InterruptedException ignored<span style="color:#f92672">)</span> <span style="color:#f92672">{</span> <span style="color:#f92672">}</span>
+                <span style="color:#f92672">}</span>
+            <span style="color:#f92672">};</span>
+            t<span style="color:#f92672">.</span><span style="color:#a6e22e">start</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+        
+        <span style="color:#66d9ef">long</span> start <span style="color:#f92672">=</span> System<span style="color:#f92672">.</span><span style="color:#a6e22e">nanoTime</span><span style="color:#f92672">();</span>
+        startGate<span style="color:#f92672">.</span><span style="color:#a6e22e">countDown</span><span style="color:#f92672">();</span>
+        endGate<span style="color:#f92672">.</span><span style="color:#a6e22e">await</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">long</span> end <span style="color:#f92672">=</span> System<span style="color:#f92672">.</span><span style="color:#a6e22e">nanoTime</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">return</span> end <span style="color:#f92672">-</span> start<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="futuretask">FutureTask</h3>
+<p><em>FutureTask</em> 实现了 Future 语义，表示一种更抽象的可生成结果的计算。<em>FutureTask</em> 表示的计算时通过 <em>Callable</em> 来实现的，相当于一种可生成结果的 <em>Runnable</em>，并且可以处于以下3种状态：</p>
+<ul>
+<li>等待运行（Waiting to run）</li>
+<li>正在运行（Running）</li>
+<li>运行完成（Completed）</li>
+</ul>
+<p><em>Future.get</em> 的行为取决于任务的状态。如果任务已经完成，那么 <em>get</em> 会立即返回结果，否则会阻塞直到任务进入完成状态，然后返回结果或抛出异常。<em>FutureTask</em> 将计算机过从执行计算的线程传递到获取这个结果的线程，其规范确保了这种传递过程能实现结果的安全发布。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Preloader</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> FutureTask<span style="color:#f92672">&lt;</span>ProductInfo<span style="color:#f92672">&gt;</span> future <span style="color:#f92672">=</span>
+            <span style="color:#66d9ef">new</span> FutureTask<span style="color:#f92672">&lt;</span>ProductInfo<span style="color:#f92672">&gt;(</span><span style="color:#66d9ef">new</span> Callable<span style="color:#f92672">&lt;</span>ProductInfo<span style="color:#f92672">&gt;()</span> <span style="color:#f92672">{</span>
+                <span style="color:#a6e22e">@Override</span>
+                <span style="color:#66d9ef">public</span> ProductInfo <span style="color:#a6e22e">call</span><span style="color:#f92672">()</span> <span style="color:#66d9ef">throws</span> DataLoadExcption <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">return</span> loadProductInfo<span style="color:#f92672">();</span>
+                <span style="color:#f92672">}</span>
+            <span style="color:#f92672">});</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Thread thread <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Thread<span style="color:#f92672">(</span>future<span style="color:#f92672">);</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">start</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span> thread<span style="color:#f92672">.</span><span style="color:#a6e22e">start</span><span style="color:#f92672">();</span> <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> ProductInfo <span style="color:#a6e22e">get</span><span style="color:#f92672">()</span>
+        <span style="color:#66d9ef">throws</span> DataLoadException<span style="color:#f92672">,</span> InterruptedException <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">return</span> future<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>ExecutionException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            Throwable cause <span style="color:#f92672">=</span> e<span style="color:#f92672">.</span><span style="color:#a6e22e">getCause</span><span style="color:#f92672">();</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>cause <span style="color:#66d9ef">instanceof</span> DataLoadException<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">throw</span> <span style="color:#f92672">(</span>DataLoadException<span style="color:#f92672">)</span> cause<span style="color:#f92672">;</span>
+            <span style="color:#f92672">}</span> <span style="color:#66d9ef">else</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">throw</span> launderThrowable<span style="color:#f92672">(</span>cause<span style="color:#f92672">);</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p><em>Preloader</em> 创建了一个 <em>FutureTask</em>，其中包含从数据库加载产品信息的任务，以及一个执行运算的线程。由于在构造函数或静态初始化方法中启动线程并不是一种好方法，因此提供了一个 <em>start</em> 方法来启动线程。当程序随后需要访问数据时，可以调用 <em>get</em> 方法。</p>
+<p><em>Callable</em> 表示的任务可以抛出受检查的或未受检查的异常，并且任何代码都可能抛出一个 <em>Error</em>。无论任务代码抛出什么异常，都会被封装到一个 <em>ExecutionException</em> 种，并在 <em>Future.get</em> 中被重新抛出。</p>
+<p><em>get</em> 不仅需要处理可能出现的 <em>ExecutionException</em>（以及未检查的 <em>CancellationException</em>），而且还由于<em>ExecutionException</em> 是作为一个 <em>Throwable</em> 类返回的，处理并不容易。所以使用 <em>launderThrowable</em> 辅助方法来封装一些复杂的异常处理逻辑。<em>Preloader</em> 会首先检查已知的受检查异常，并重新抛出它们。剩下的未检查异常留给 <em>launderThrowable</em> 处理并抛出。其实现如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> RuntimeException <span style="color:#a6e22e">launderThrowable</span><span style="color:#f92672">(</span>Throwable t<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>t <span style="color:#66d9ef">instanceof</span> RuntimeException<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#f92672">(</span>RuntimeException<span style="color:#f92672">)</span>t<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span> <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>t <span style="color:#66d9ef">instanceof</span> Error<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">throw</span> <span style="color:#f92672">(</span>Error<span style="color:#f92672">)</span> t<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span> <span style="color:#66d9ef">else</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> IllegalStateException<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Not unchecked&#34;</span><span style="color:#f92672">,</span> t<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="信号量">信号量</h3>
+<p>计数信号量（Counting Semaphore）用来控制同时访问某个特定资源的操作数量，或者同时执行某个指定操作的数量。计数信号量还可以用来实现某种资源池，或者对容器施加边界。</p>
+<p>下面的代码是将容器变成有界阻塞的：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">BoundedHashSet</span><span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Set<span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;</span> set<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Semaphore sem<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">BoundedHashSet</span><span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> bound<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">set</span> <span style="color:#f92672">=</span> Collections<span style="color:#f92672">.</span><span style="color:#a6e22e">synchronizedSet</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> HashSet<span style="color:#f92672">&lt;</span>T<span style="color:#f92672">&gt;());</span>
+        sem <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Semaphore<span style="color:#f92672">(</span>bound<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>T o<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> InterruptedExcption <span style="color:#f92672">{</span>
+        sem<span style="color:#f92672">.</span><span style="color:#a6e22e">acquire</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">boolean</span> wasAdded <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span><span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            wasAdded <span style="color:#f92672">=</span> set<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>o<span style="color:#f92672">);</span>
+            <span style="color:#66d9ef">return</span> wasAdded<span style="color:#f92672">;</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">finally</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#f92672">(!</span>wasAdded<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                sem<span style="color:#f92672">.</span><span style="color:#a6e22e">release</span><span style="color:#f92672">();</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">boolean</span> <span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>Object o<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">boolean</span> wasRemoved <span style="color:#f92672">=</span> set<span style="color:#f92672">.</span><span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>o<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>wasRemoved<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            sem<span style="color:#f92672">.</span><span style="color:#a6e22e">release</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> wasRemoved<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="栅栏">栅栏</h3>
+<p>栅栏能阻塞一组线程知道某个事件发生。栅栏与闭锁的关键区别在于，所有线程必须同时到达栅栏位置，才能继续执行。</p>
+<p><em>CyclicBarrier</em> 可以使一定数量的参与方反复地在栅栏位置汇集，它在并行迭代算法中非常有用：这种算法通常将一个问题拆分成一系列相互独立的子问题。当线程到达栅栏位置时将调用 <em>await</em> 方法，这个方法将阻塞直到所有线程都到达栅栏位置。</p>
+<ul>
+<li>如果所有线程都到达了栅栏位置，那么栅栏将打开，此时所有线程都被释放，而栅栏将<strong>被重置</strong>以便下次使用。</li>
+<li>如果对 <em>await</em> 的调用超市，或者 <em>await</em> 阻塞的线程被中断，那么栅栏就被认为是打破了，所有阻塞的 <em>await</em> 调用都将终止并抛出 <em>BrokenBarrierException</em>。</li>
+<li>如果成功通过栅栏，那么 <em>await</em> 将为每个线程返回一个唯一的到达索引号，这个索引号可以被利用来选举产生一个领导线程，让其在下一次迭代中执行一些特殊的工作。</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CellularAutomata</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Board mainBoard<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> CyclicBarrier barrier<span style="color:#f92672">;</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Worker<span style="color:#f92672">[]</span> workers<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">CellularAutomata</span><span style="color:#f92672">(</span>Board board<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">mainBoard</span> <span style="color:#f92672">=</span> board<span style="color:#f92672">;</span>
+        <span style="color:#66d9ef">int</span> count <span style="color:#f92672">=</span> Runtime<span style="color:#f92672">.</span><span style="color:#a6e22e">getRuntime</span><span style="color:#f92672">().</span><span style="color:#a6e22e">availableProcessors</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">barrier</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> CyclicBarrier<span style="color:#f92672">(</span>count<span style="color:#f92672">,</span>
+                                        <span style="color:#66d9ef">new</span> Runnable<span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+                                            <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+                                                mainBoard<span style="color:#f92672">.</span><span style="color:#a6e22e">commitNewValues</span><span style="color:#f92672">();</span>
+                                            <span style="color:#f92672">}</span>
+                                        <span style="color:#f92672">});</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">workers</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Worker<span style="color:#f92672">[</span>count<span style="color:#f92672">];</span>
+        <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> i <span style="color:#f92672">&lt;</span> count<span style="color:#f92672">;</span> i<span style="color:#f92672">++)</span> <span style="color:#f92672">{</span>
+            workers<span style="color:#f92672">[</span>i<span style="color:#f92672">]</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Worker<span style="color:#f92672">(</span>mainBoard<span style="color:#f92672">.</span><span style="color:#a6e22e">getSubBoard</span><span style="color:#f92672">(</span>count<span style="color:#f92672">,</span> i<span style="color:#f92672">));</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Worker</span> <span style="color:#66d9ef">implements</span> Runnable <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Board board<span style="color:#f92672">;</span>
+        
+        <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">Worker</span><span style="color:#f92672">(</span>Board board<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">board</span> <span style="color:#f92672">=</span> board<span style="color:#f92672">;</span>
+        <span style="color:#f92672">}</span>
+        
+        <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">run</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">while</span> <span style="color:#f92672">(!</span>board<span style="color:#f92672">.</span><span style="color:#a6e22e">hasConverged</span><span style="color:#f92672">())</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> x <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> x <span style="color:#f92672">&lt;</span> board<span style="color:#f92672">.</span><span style="color:#a6e22e">getMaxX</span><span style="color:#f92672">();</span> x<span style="color:#f92672">++)</span> <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> y <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> y <span style="color:#f92672">&lt;</span> board<span style="color:#f92672">.</span><span style="color:#a6e22e">getMaxY</span><span style="color:#f92672">();</span> y<span style="color:#f92672">++)</span> <span style="color:#f92672">{</span>
+                        board<span style="color:#f92672">.</span><span style="color:#a6e22e">setNewValue</span><span style="color:#f92672">(</span>x<span style="color:#f92672">,</span> y<span style="color:#f92672">,</span> computeValue<span style="color:#f92672">(</span>x<span style="color:#f92672">,</span> y<span style="color:#f92672">));</span>
+                    <span style="color:#f92672">}</span>
+                <span style="color:#f92672">}</span>
+                
+                <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+                    barrier<span style="color:#f92672">.</span><span style="color:#a6e22e">await</span><span style="color:#f92672">();</span>
+                <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>InterruptedException ex<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">return</span><span style="color:#f92672">;</span>
+                <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>BrokenBarrierException ex<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">return</span><span style="color:#f92672">;</span>
+                <span style="color:#f92672">}</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+        
+        <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">start</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">for</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0<span style="color:#f92672">;</span> i <span style="color:#f92672">&lt;</span> workers<span style="color:#f92672">.</span><span style="color:#a6e22e">length</span><span style="color:#f92672">;</span> i<span style="color:#f92672">++)</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">new</span> Thread<span style="color:#f92672">(</span>workers<span style="color:#f92672">[</span>i<span style="color:#f92672">]).</span><span style="color:#a6e22e">start</span><span style="color:#f92672">();</span>
+            <span style="color:#f92672">}</span>
+            mainBoard<span style="color:#f92672">.</span><span style="color:#a6e22e">waitForConvergence</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>上面的代码段给出了如何通过栅栏来计算细胞的自动化模拟。在把模拟过程并行化时，为每个元素（相当于细胞）分配一个独立的线程时不现实的，因为这将<strong>产生过多的线程</strong>，在协调这些线程上导致的开销会降低计算性能。合理的做法是将问题分解成一定数量的子问题，为每个子问题分配一个线程来进行求解，之后再将所有的结果合并。其中分解的线程数 <em>count</em> 等于可用CPU数量。</p>
+<p>另一种形式的栅栏是 <em>Exchanger</em>，它是一种两方（<em>Two-Party</em>）栅栏，各方在栅栏位置上交换数据。当两方执行不对称的操作时，例如一个线程向缓冲区写入数据，另一个线程从缓冲区读取数据。这些线程可以使用 <em>Exchanger</em> 来汇合，并将满的缓冲区与空的缓冲区交换。</p>
+<h2 id="构建高效且可伸缩的结果缓存">构建高效且可伸缩的结果缓存</h2>
+<p>具体迭代过程见书 P85</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Memozier</span><span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> <span style="color:#66d9ef">implements</span> Computable<span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> ConcurrentMap<span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> Future<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;&gt;</span> cache <span style="color:#f92672">=</span>
+        <span style="color:#66d9ef">new</span> ConcurrentHashMap<span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> Future<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;&gt;();</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">final</span> Computable<span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> c<span style="color:#f92672">;</span>
+    
+    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">Memozier</span><span style="color:#f92672">(</span>Computable<span style="color:#f92672">&lt;</span>A<span style="color:#f92672">,</span> V<span style="color:#f92672">&gt;</span> c<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">this</span><span style="color:#f92672">.</span><span style="color:#a6e22e">c</span> <span style="color:#f92672">=</span> c<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+    
+    <span style="color:#66d9ef">public</span> V <span style="color:#a6e22e">compute</span><span style="color:#f92672">(</span><span style="color:#66d9ef">final</span> A arg<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> InterruptedException <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">while</span> <span style="color:#f92672">(</span><span style="color:#66d9ef">true</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            Future<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;</span> f <span style="color:#f92672">=</span> cache<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>arg<span style="color:#f92672">);</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>f <span style="color:#f92672">==</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                Callable<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;</span> eval <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Callable<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;()</span> <span style="color:#f92672">{</span>
+                    <span style="color:#66d9ef">public</span> V <span style="color:#a6e22e">call</span><span style="color:#f92672">()</span> <span style="color:#66d9ef">throws</span> InterruptedException <span style="color:#f92672">{</span>
+                        <span style="color:#66d9ef">return</span> c<span style="color:#f92672">.</span><span style="color:#a6e22e">compute</span><span style="color:#f92672">(</span>arg<span style="color:#f92672">);</span>
+                    <span style="color:#f92672">}</span>
+                <span style="color:#f92672">};</span>
+                FutureTask<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;</span> ft <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> FutureTask<span style="color:#f92672">&lt;</span>V<span style="color:#f92672">&gt;(</span>eval<span style="color:#f92672">);</span>
+                f <span style="color:#f92672">=</span> cache<span style="color:#f92672">.</span><span style="color:#a6e22e">putIfAbsent</span><span style="color:#f92672">(</span>arg<span style="color:#f92672">,</span> ft<span style="color:#f92672">);</span>	<span style="color:#75715e">// ConcurrentHashMap中如果键值存在，putIfAbsent返回该键值；如果不存在，则返回null
+</span><span style="color:#75715e"></span>                <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>f <span style="color:#f92672">==</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                    f <span style="color:#f92672">=</span> ft<span style="color:#f92672">;</span>
+                    ft<span style="color:#f92672">.</span><span style="color:#a6e22e">run</span><span style="color:#f92672">();</span>
+                <span style="color:#f92672">}</span>
+            <span style="color:#f92672">}</span>
+            
+            <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">return</span> f<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span>
+            <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>CancellationException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                cache<span style="color:#f92672">.</span><span style="color:#a6e22e">remove</span><span style="color:#f92672">(</span>arg<span style="color:#f92672">,</span> f<span style="color:#f92672">);</span>
+            <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>ExecutionException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                <span style="color:#66d9ef">throw</span> launderThrowable<span style="color:#f92672">(</span>e<span style="color:#f92672">.</span><span style="color:#a6e22e">getCause</span><span style="color:#f92672">());</span>
+            <span style="color:#f92672">}</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div>
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>
