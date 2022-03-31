@@ -576,15 +576,15 @@ spring:
             allowCredentials: true # 是否允许携带cookie
             maxAge: 360000 # 这次跨域检测的有效期
       routes: # 网关路由配置
-        - id: api-service        # 路由id，自定义，只要唯一即可
-          uri: lb://api-service  # 路由的目标地址 lb就是负载均衡，后面跟服务名称
-          predicates:            # 路由断言，也就是判断请求是否符合路由规则的条件
-            - Path=/api/**       # 按照路径匹配，只要以/api/开头就符合要求
+        - id: api-service        	# 路由id，自定义，只要唯一即可
+          uri: lb://member-service  # 路由的目标地址 lb就是负载均衡，后面跟服务名称
+          predicates:            	# 路由断言，也就是判断请求是否符合路由规则的条件
+            - Path=/member/**       # 按照路径匹配，只要以/member开头就符合要求
 
         - id: auth-service
           uri: lb://auth-service
           predicates:
-            - Path=/auth/**         # 按照路径匹配，只要以/auth/开头就符合要求
+            - Path=/auth/**         # 按照路径匹配，只要以/auth开头就符合要求
           filters:
             - StripPrefix=1         # 在将请求发送到下游之前从请求中剥离的路径个数
       discovery:
@@ -754,12 +754,69 @@ secure:
 <span style="color:#f92672">}</span>
 </code></pre></div><h4 id="authfilter">AuthFilter</h4>
 <p>使用 filter 将 header 中的信息提取出来。</p>
-<p>主要流程：当请求到达时</p>
-<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TD;
-    A(asdsad)--&gt;B &amp; C;
-    B--&gt;D
-    C--&gt;D;
-</code></pre><p>参考资料：</p>
+<p>主要流程：</p>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TB;
+	A([AuthFilter])
+	--&gt;B(获取request.header)
+    --&gt;C(&quot;获取header中的user字段（JSON形式）&quot;)
+    --&gt;D(&quot;JSON.parse(user)，得到由网关写入的内容（即user_id和corp_id）&quot;)
+    --&gt;E(将得到的信息写入UserSession)
+    --&gt;F(&quot;filter链继续执行&lt;br&gt;filterChain.doFilter(servletRequest, servletResponse)&quot;)
+    --&gt;G(清空UserSession里的信息)
+</code></pre><p>代码如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@Slf4j</span>
+<span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AuthFilter</span> <span style="color:#66d9ef">implements</span> Filter <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">doFilter</span><span style="color:#f92672">(</span>ServletRequest servletRequest<span style="color:#f92672">,</span> ServletResponse servletResponse<span style="color:#f92672">,</span> FilterChain filterChain<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> IOException<span style="color:#f92672">,</span> ServletException <span style="color:#f92672">{</span>
+        <span style="color:#75715e">//从Header中获取用户信息
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            ServletRequestAttributes servletRequestAttributes <span style="color:#f92672">=</span> <span style="color:#f92672">(</span>ServletRequestAttributes<span style="color:#f92672">)</span> RequestContextHolder<span style="color:#f92672">.</span><span style="color:#a6e22e">getRequestAttributes</span><span style="color:#f92672">();</span>
+            String userStr <span style="color:#f92672">=</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">;</span>
+            <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>servletRequestAttributes <span style="color:#f92672">!=</span> <span style="color:#66d9ef">null</span><span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+                userStr <span style="color:#f92672">=</span> servletRequestAttributes<span style="color:#f92672">.</span><span style="color:#a6e22e">getRequest</span><span style="color:#f92672">().</span><span style="color:#a6e22e">getHeader</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;user&#34;</span><span style="color:#f92672">);</span>
+            <span style="color:#f92672">}</span>
+            JSONObject userJsonObject <span style="color:#f92672">=</span> JSONObject<span style="color:#f92672">.</span><span style="color:#a6e22e">parseObject</span><span style="color:#f92672">(</span>userStr<span style="color:#f92672">);</span>
+            <span style="color:#75715e">// 获取用户信息
+</span><span style="color:#75715e"></span>            UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">setUser</span><span style="color:#f92672">(</span>userJsonObject<span style="color:#f92672">.</span><span style="color:#a6e22e">getLong</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;corp_id&#34;</span><span style="color:#f92672">),</span> userJsonObject<span style="color:#f92672">.</span><span style="color:#a6e22e">getLong</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;user_id&#34;</span><span style="color:#f92672">));</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>Exception e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            log<span style="color:#f92672">.</span><span style="color:#a6e22e">error</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;ltd.teza.member.filter.AuthFilter 获取用户信息异常，可能是未登陆导致。&#34;</span><span style="color:#f92672">,</span> e<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">finally</span> <span style="color:#f92672">{</span>
+            filterChain<span style="color:#f92672">.</span><span style="color:#a6e22e">doFilter</span><span style="color:#f92672">(</span>servletRequest<span style="color:#f92672">,</span> servletResponse<span style="color:#f92672">);</span>
+            <span style="color:#75715e">// 清除用户信息
+</span><span style="color:#75715e"></span>            UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">clear</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="实现测试controller">实现测试controller</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@RestController</span>
+<span style="color:#a6e22e">@RequestMapping</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;/member&#34;</span><span style="color:#f92672">)</span>
+<span style="color:#a6e22e">@Slf4j</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MemberHelloController</span> <span style="color:#66d9ef">implements</span> MemberHelloClient <span style="color:#f92672">{</span>
+
+    <span style="color:#a6e22e">@GetMapping</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;hello&#34;</span><span style="color:#f92672">)</span>
+    <span style="color:#66d9ef">public</span> ServiceResult<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">hello</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        log<span style="color:#f92672">.</span><span style="color:#a6e22e">info</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;member-service --&gt; ltd.teza.controller.HelloController.hello --&gt; test log.info&#34;</span><span style="color:#f92672">);</span>
+<span style="color:#75715e">//        log.error(&#34;member-service --&gt; ltd.teza.controller.HelloController.hello --&gt; test log.error&#34;);
+</span><span style="color:#75715e"></span>        ServiceResult<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">&gt;</span> result <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ServiceResult<span style="color:#f92672">&lt;&gt;(</span><span style="color:#66d9ef">true</span><span style="color:#f92672">);</span>
+        result<span style="color:#f92672">.</span><span style="color:#a6e22e">setModule</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;hello! this is member-service!~&#34;</span><span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">return</span> result<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@GetMapping</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;getUser&#34;</span><span style="color:#f92672">)</span>
+    <span style="color:#66d9ef">public</span> String <span style="color:#a6e22e">getUser</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        Long userId <span style="color:#f92672">=</span> UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserId</span><span style="color:#f92672">();</span>
+        Long corpId <span style="color:#f92672">=</span> UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">getCorpId</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#e6db74">&#34;corpId=&#34;</span> <span style="color:#f92672">+</span> corpId <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;\nuserId=&#34;</span> <span style="color:#f92672">+</span> userId<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="验证-2">验证</h3>
+<p>通过网关访问来调取接口，在 header 中附加上之前获取的 access_token（记得前缀加上<code>Bearer </code>)。可以看到网关没有拦截请求，且在api层也获取到了用户信息。</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220331/20220331154925.png" alt="image-20220331154925251"></p>
+<p>接下来试试不携带 token 来访问。可以看到在网关就直接拒绝了请求。</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220331/20220331155341.png" alt="image-20220331155341474"></p>
+<p>PS：当 access_token 过期时，我们可以用 refresh_token 来获取新的 access_token（正常来说 refresh_token 的有效期要比 access_token 长的多），这样就可以减少用户需要重新输入账号密码来登陆的情况，这里就不再赘述了。</p>
+<p>参考资料：</p>
 <p><a href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749</a></p>
 <p><a href="http://www.ruanyifeng.com/blog/2014/05/oauth_2_0.html">理解OAuth 2.0</a></p>
 <p><a href="https://www.jianshu.com/p/576dbf44b2ae">什么是 JWT &ndash; JSON WEB TOKEN</a></p>
