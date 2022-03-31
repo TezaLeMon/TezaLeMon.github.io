@@ -26,6 +26,11 @@
     white-space: pre;
     word-wrap: normal;
   }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
 </style>
 
   
@@ -38,7 +43,8 @@
 <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+
+<body class="theme-base-0c ">
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
@@ -59,7 +65,7 @@
   </div>
 </aside>
 
-    <main class="content container">
+  <main class="content container">
     <div class="post">
   <h1>Hugo主题定制</h1>
   <time datetime=2020-07-14T15:50:48&#43;0800 class="post-date">Tue, Jul 14, 2020</time>
@@ -120,14 +126,121 @@
   &lt;script src=&quot;https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js&quot;&gt;&lt;/script&gt;
   &lt;script&gt;hljs.initHighlightingOnLoad();&lt;/script&gt;
 </code></pre><p>  至此，基本定制工作完成！~ 😏</p>
+<hr>
+<p>2022-3-31更新</p>
+<h3 id="mermaid-支持">Mermaid 支持</h3>
+<p><a href="https://github.com/mermaid-js/mermaid">mermaid官方github</a></p>
+<p>首先，官方的渲染是通过<code>&lt;div class=&quot;mermaid&quot;&gt;&lt;/div&gt;</code>标签将 div 中的内容渲染成图表的。然而咱们在 typora 中写 <em>mermaid</em> 的方式则是通过代码块来实现，如下：</p>
+<pre tabindex="0"><code>```mermaid
+graph TD;
+    A--&gt;B;
+    A--&gt;C;
+    B--&gt;D;
+```
+</code></pre><p><em>hugo</em> 在渲染代码块时，是将其渲染为以下 html：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">&lt;<span style="color:#f92672">pre</span>&gt;&lt;<span style="color:#f92672">code</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;language-语言种类&#34;</span>&gt;
+    <span style="color:#75715e">&lt;!-- code --&gt;</span>
+&lt;/<span style="color:#f92672">code</span>&gt;&lt;/<span style="color:#f92672">pre</span>&gt;
+</code></pre></div><p>所以咱们的核心思路即是：如何将<code>&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;&lt;/code&gt;&lt;/code&gt;</code>替换为<code>&lt;div class=&quot;mermaid&quot;&gt;&lt;/div&gt;</code>。本人并不太懂 js 代码，直接搬运了大佬的实现（原文放在下面的参考文档中了）。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html"><span style="color:#75715e">&lt;!-- mermaid JS 导入 --&gt;</span>
+&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+&lt;<span style="color:#f92672">script</span>&gt;
+    <span style="color:#75715e">// Replace mermaid pre.code to div
+</span><span style="color:#75715e"></span>    Array.<span style="color:#a6e22e">from</span>(document.<span style="color:#a6e22e">getElementsByClassName</span>(<span style="color:#e6db74">&#34;language-mermaid&#34;</span>)).<span style="color:#a6e22e">forEach</span>(
+        (<span style="color:#a6e22e">el</span>) =&gt; {
+            <span style="color:#a6e22e">el</span>.<span style="color:#a6e22e">parentElement</span>.<span style="color:#a6e22e">outerHTML</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">`&lt;div class=&#34;mermaid&#34;&gt;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">el</span>.<span style="color:#a6e22e">innerText</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&lt;/div&gt;`</span>;
+        }
+    );
+    <span style="color:#a6e22e">mermaid</span>.<span style="color:#a6e22e">initialize</span>({ <span style="color:#a6e22e">startOnLoad</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span> });
+&lt;/<span style="color:#f92672">script</span>&gt;
+
+
+
+<span style="color:#75715e">&lt;!-- 别忘了把渲染出的svg居中显示 --&gt;</span>
+&lt;<span style="color:#f92672">style</span>&gt;
+  <span style="color:#f92672">svg</span> {
+    <span style="color:#66d9ef">display</span>: <span style="color:#66d9ef">block</span>;
+    <span style="color:#66d9ef">margin</span>: <span style="color:#66d9ef">auto</span>;
+  }
+&lt;/<span style="color:#f92672">style</span>&gt;
+</code></pre></div><p>需要注意的是，核心的代码需要放在页面最下方（最好是放在<code>&lt;body&gt;</code>标签的最后），这样才能正常把所有的<code>&lt;pre&gt;&lt;code class=&quot;language-mermaid&quot;&gt;&lt;/code&gt;&lt;/code&gt;</code>替换为<code>&lt;div class=&quot;mermaid&quot;&gt;&lt;/div&gt;</code>，如下图：</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220331/20220331143902.png" alt="image-20220331143902523"></p>
+<p>由于我用的 hyde 主题默认是没有在 body 后的模版的，所以就自己小改一下代码吧～</p>
+<ol>
+<li>
+<p>在 <strong>themes&gt;hyde&gt;layouts&gt;_default&gt;baseof.html</strong>（正如其名字，这是 hyde 的页面基础架构模版）的<code>&lt;body&gt;</code>最后声明要添加一个模版文件 <em>body_end.html</em>。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">{{ partial &#34;head.html&#34; . }}
+
+&lt;<span style="color:#f92672">body</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;{{ .Site.Params.themeColor }} {{if .Site.Params.layoutReverse}}layout-reverse{{end}}&#34;</span>&gt;
+  {{ partial &#34;sidebar.html&#34; . }}
+  &lt;<span style="color:#f92672">main</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;content container&#34;</span>&gt;
+    {{ block &#34;main&#34; . -}}{{- end }}
+  &lt;/<span style="color:#f92672">main</span>&gt;
+
+  {{ if not .Site.IsServer }}
+  {{ template &#34;_internal/google_analytics.html&#34; . }}
+  {{ end }}
+
+  <span style="color:#75715e">&lt;!-- 新增的代码 --&gt;</span>
+  {{ partial &#34;body_end.html&#34; . }}
+&lt;/<span style="color:#f92672">body</span>&gt;
+
+&lt;/<span style="color:#f92672">html</span>&gt;
+</code></pre></div></li>
+<li>
+<p>在 <strong>themes&gt;hyde&gt;layouts&gt;partials&gt;body_end.html</strong>（新建）内写上引入 mermaid 支持的代码。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html"><span style="color:#75715e">&lt;!-- mermaid JS --&gt;</span>
+&lt;<span style="color:#f92672">script</span> <span style="color:#a6e22e">src</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js&#34;</span>&gt;&lt;/<span style="color:#f92672">script</span>&gt;
+&lt;<span style="color:#f92672">script</span>&gt;
+    <span style="color:#75715e">// Replace mermaid pre.code to div
+</span><span style="color:#75715e"></span>    Array.<span style="color:#a6e22e">from</span>(document.<span style="color:#a6e22e">getElementsByClassName</span>(<span style="color:#e6db74">&#34;language-mermaid&#34;</span>)).<span style="color:#a6e22e">forEach</span>(
+        (<span style="color:#a6e22e">el</span>) =&gt; {
+            <span style="color:#a6e22e">el</span>.<span style="color:#a6e22e">parentElement</span>.<span style="color:#a6e22e">outerHTML</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">`&lt;div class=&#34;mermaid&#34;&gt;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">el</span>.<span style="color:#a6e22e">innerText</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&lt;/div&gt;`</span>;
+        }
+    );
+    <span style="color:#a6e22e">mermaid</span>.<span style="color:#a6e22e">initialize</span>({ <span style="color:#a6e22e">startOnLoad</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span> });
+&lt;/<span style="color:#f92672">script</span>&gt;
+</code></pre></div></li>
+<li>
+<p>在 <strong>themes&gt;hyde&gt;layouts&gt;partials&gt;head_fonts.html</strong> 内修改生成的 svg 标签的样式。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">&lt;<span style="color:#f92672">style</span>&gt;
+  <span style="color:#f92672">svg</span> {
+    <span style="color:#66d9ef">display</span>: <span style="color:#66d9ef">block</span>;
+    <span style="color:#66d9ef">margin</span>: <span style="color:#66d9ef">auto</span>;
+  }
+&lt;/<span style="color:#f92672">style</span>&gt;
+</code></pre></div></li>
+<li>
+<p>最终效果⬇️</p>
+</li>
+</ol>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TD;
+    A--&gt;B;
+    A--&gt;C;
+    B--&gt;D;
+</code></pre><p>参考文档：</p>
+<p><a href="https://note.qidong.name/2020/07/mermaid/">使用Mermaid在hugo的Markdown中绘制UML</a></p>
+<p><a href="https://clslaid.icu/add_mermaid_support_to_even_theme/">俺如何为 hugo-theme-even 提供 mermaid 支持</a></p>
 
 </div>
 
 
-    </main>
+  </main>
 
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
     
-      
-    
-  </body>
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
 </html>

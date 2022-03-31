@@ -26,6 +26,11 @@
     white-space: pre;
     word-wrap: normal;
   }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
 </style>
 
   
@@ -39,7 +44,8 @@
 <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+
+<body class="theme-base-0c ">
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
@@ -60,9 +66,11 @@
   </div>
 </aside>
 
-    <main class="content container">
+  <main class="content container">
     <ul class="posts">
 <li>
+    <span><a href="https://TezaLeMon.github.io/post/learn_javaspringsecurity01/">Java｜Spring Security &#43; Spring gateway &#43; Oauth2 &#43; JWT 整合实战</a> <time class="pull-right post-list" datetime="2022-03-27T14:12:44&#43;0800">Sun, Mar 27, 2022</time></span>
+  </li><li>
     <span><a href="https://TezaLeMon.github.io/post/learn_vue02/">Vue学习笔记[02] 组件引入&amp;使用</a> <time class="pull-right post-list" datetime="2022-03-18T19:47:41&#43;0800">Fri, Mar 18, 2022</time></span>
   </li><li>
     <span><a href="https://TezaLeMon.github.io/post/learn_vue01/">Vue学习笔记[01] 新建vue&#43;webpack工程</a> <time class="pull-right post-list" datetime="2022-03-18T16:14:54&#43;0800">Fri, Mar 18, 2022</time></span>
@@ -96,10 +104,22 @@
     <span><a href="https://TezaLeMon.github.io/post/hellohugo/">Hello Hugo!</a> <time class="pull-right post-list" datetime="2020-07-14T15:21:40&#43;0800">Tue, Jul 14, 2020</time></span>
   </li>
 </ul>
-    </main>
+  </main>
 
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
     
-      
-    
-  </body>
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
 </html>

@@ -26,6 +26,11 @@
     white-space: pre;
     word-wrap: normal;
   }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
 </style>
 
   
@@ -38,7 +43,8 @@
 <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+
+<body class="theme-base-0c ">
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
@@ -59,7 +65,7 @@
   </div>
 </aside>
 
-    <main class="content container">
+  <main class="content container">
     <div class="post">
   <h1>Typora配置合集</h1>
   <time datetime=2022-03-18T16:11:51&#43;0800 class="post-date">Fri, Mar 18, 2022</time>
@@ -75,10 +81,22 @@
 </div>
 
 
-    </main>
+  </main>
 
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
     
-      
-    
-  </body>
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
 </html>

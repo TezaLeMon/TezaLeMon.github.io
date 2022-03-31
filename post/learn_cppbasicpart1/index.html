@@ -26,6 +26,11 @@
     white-space: pre;
     word-wrap: normal;
   }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
 </style>
 
   
@@ -38,7 +43,8 @@
 <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+
+<body class="theme-base-0c ">
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
@@ -59,7 +65,7 @@
   </div>
 </aside>
 
-    <main class="content container">
+  <main class="content container">
     <div class="post">
   <h1>C&#43;&#43;基础知识[1]——智能指针</h1>
   <time datetime=2021-03-07T10:58:24&#43;0800 class="post-date">Sun, Mar 7, 2021</time>
@@ -259,10 +265,22 @@ weak_ptr<span style="color:#f92672">&lt;</span><span style="color:#66d9ef">int</
 </div>
 
 
-    </main>
+  </main>
 
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
     
-      
-    
-  </body>
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
 </html>

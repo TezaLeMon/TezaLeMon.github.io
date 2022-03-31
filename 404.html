@@ -26,6 +26,11 @@
     white-space: pre;
     word-wrap: normal;
   }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
 </style>
 
   
@@ -38,7 +43,8 @@
 <script>hljs.initHighlightingOnLoad();</script>
 </head>
 
-  <body class="theme-base-0c ">
+
+<body class="theme-base-0c ">
   <aside class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
@@ -59,13 +65,25 @@
   </div>
 </aside>
 
-    <main class="content container">
+  <main class="content container">
     <h1>404: Page not found</h1>
 <p class="lead">Sorry, we've misplaced that URL or it's pointing to something that doesn't exist. <a href="https://TezaLeMon.github.io/">Head back home</a> to try finding it again.</p>
-    </main>
+  </main>
 
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
     
-      
-    
-  </body>
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
 </html>

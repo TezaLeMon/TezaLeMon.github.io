@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN" lang="zh-CN">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.90.1" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Java｜Spring Security &#43; Spring gateway &#43; Oauth2 &#43; JWT 整合实战 &middot; Teza小站</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://TezaLeMon.github.io/css/hyde.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+<link href="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/styles/atom-one-dark.min.css" rel="stylesheet">
+
+<style>
+  pre {
+     
+    white-space: pre;
+    word-wrap: normal;
+  }
+
+  svg {
+    display: block;
+    margin: auto;
+  }
+</style>
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="../../apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="../../favicon.png">
+
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/highlight.js/10.1.1/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+</head>
+
+
+<body class="theme-base-0c ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://TezaLeMon.github.io/"><h1>Teza小站</h1></a>
+      <p class="lead">
+       无名小站，始于2020-7-14，记录某大学仔学习历程。 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://TezaLeMon.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>Copyright (c) 2020, Guanda Wei</p>
+  </div>
+</aside>
+
+  <main class="content container">
+    <div class="post">
+  <h1>Java｜Spring Security &#43; Spring gateway &#43; Oauth2 &#43; JWT 整合实战</h1>
+  <time datetime=2022-03-27T14:12:44&#43;0800 class="post-date">Sun, Mar 27, 2022</time>
+  <p>背景：我想在微服务中实现注册/登陆/登出功能，并且让部分服务只能在用户已登录状态下被访问。</p>
+<p>核心诉求点：</p>
+<ul>
+<li>访问服务需要携带用户信息，同时也能设置<strong>白名单</strong>，针对特定的接口不需要携带用户信息也可访问。</li>
+<li>非业务的不合法的请求<strong>统一在网关层拦截</strong>，其他服务无需处理（当然，与业务相关的请求需要在api层处理）。</li>
+</ul>
+<p>系统架构图如下：</p>
+<!-- raw HTML omitted -->
+<p>登陆请求：用户使用账号+密码，通过网关到 <em>auth-service</em> 账号密码校验，校验通过后返还 token 到客户端。</p>
+<p>访问api服务：用户将获取的 token 放到请求 <em>Header</em> 中，首先通过网关到 <em>auth-service</em> 进行 token 校验，校验通过才可以访问其他服务。</p>
+<h1 id="基础原理">基础原理</h1>
+<h2 id="服务器如何认证请求">服务器如何认证请求？</h2>
+<h3 id="发展史">发展史</h3>
+<p>最初，Web基本是静态资源，是一份可以通过网络来查看的“文档”，每个HTTP请求对于服务器来说都是一样的，不需要知道是“谁”来访问了。随着交互式Web的兴起，如在线购物网站、论坛，识别是哪一个用户进行了访问就变成了问题（例如我想要把某个商品加到我的购物车，那么服务器需要先知道我是谁，才能把商品加到对应的购物车中）。因为HTTP请求是无状态的，那么就需要在请求中附带一些标识，用来区分不同用户。</p>
+<h3 id="基于-session-的鉴权">基于 Session 的鉴权</h3>
+<p>在客户端登陆后，服务器将数据保存在 session 库中，并返还一个 <em>session_id</em> 给客户端，客户端将这个 <em>session_id</em> 存储到 <em>cookie</em> 中，在之后的请求中都附带上这个 <em>session_id</em> ，这样服务器在响应请求时就可以根据 <em>session_id</em> 去 session 库中获取数据，从而识别出是哪个用户。</p>
+<p>基于 Session 验证的问题：</p>
+<ul>
+<li>每个用户在认证之后，都需要在服务端的 session 库中保存记录，随着用户增多，服务端的存储开销会越来越大。</li>
+<li>如果是分布式的应用，且 session 库是在内存中的，那么用户的下一次请求只有在访问到同一台机器才能获取授权的资源。这种情况下，如何在多台机器之间进行 session 的同步就成了问题。</li>
+<li>如果用户的 cookie 被截获，那么也就相当于用户信息被暴露，用户很容齐受到跨站请求伪造的攻击。</li>
+</ul>
+<h3 id="基于-token-的鉴权">基于 Token 的鉴权</h3>
+<p>相比 session，token 不需要在服务端存储用户的认证信息或者会话信息。token 鉴权的流程大致如下：</p>
+<ul>
+<li>用户使用用户名密码来请求服务器</li>
+<li>服务器进行验证用户的信息</li>
+<li>服务器通过验证，按照一定的规律组转并发送给用户一个 token</li>
+<li>客户端存储 token，并在每次请求时附送上这个 token 值</li>
+<li>服务端按照之前定义的规律验证 token 值，并返回数据</li>
+</ul>
+<h3 id="oauth-20">OAuth 2.0</h3>
+<p>OAuth是一个关于授权的开放网络标准，在全世界得到广泛应用。OAuth 2.0 的标准参考 <a href="https://tools.ietf.org/html/rfc6749">RFC 6749</a>。</p>
+<p>OAuth在&quot;客户端&quot;与&quot;服务提供商&quot;之间，设置了一个授权层（authorization layer）。&ldquo;客户端&quot;不能直接登录&quot;服务提供商&rdquo;，只能登录授权层，以此将用户与客户端区分开来。&ldquo;客户端&quot;登录授权层所用的令牌（token），与用户的密码不同。用户可以在登录的时候，指定授权层令牌的权限范围和有效期。</p>
+<p>&ldquo;客户端&quot;登录授权层以后，&ldquo;服务提供商&quot;根据令牌的权限范围和有效期，向&quot;客户端&quot;开放用户储存的资料。</p>
+<p>OAuth 2.0 的流程图如下：</p>
+<pre tabindex="0"><code>OAuth 2.0 - Protocol Flow
+
+     +--------+                               +---------------+
+     |        |--(A)- Authorization Request -&gt;|   Resource    |
+     |        |                               |     Owner     |
+     |        |&lt;-(B)-- Authorization Grant ---|               |
+     |        |                               +---------------+
+     |        |
+     |        |                               +---------------+
+     |        |--(C)-- Authorization Grant --&gt;| Authorization |
+     | Client |                               |     Server    |
+     |        |&lt;-(D)----- Access Token -------|               |
+     |        |                               +---------------+
+     |        |
+     |        |                               +---------------+
+     |        |--(E)----- Access Token ------&gt;|    Resource   |
+     |        |                               |     Server    |
+     |        |&lt;-(F)--- Protected Resource ---|               |
+     +--------+                               +---------------+
+     
+     
+    （A）用户打开客户端以后，客户端要求用户给予授权。
+
+    （B）用户同意给予客户端授权。
+
+    （C）客户端使用上一步获得的授权，向认证服务器申请令牌。
+
+    （D）认证服务器对客户端进行认证以后，确认无误，同意发放令牌。
+
+    （E）客户端使用令牌，向资源服务器申请获取资源。
+
+    （F）资源服务器确认令牌无误，同意向客户端开放资源。
+</code></pre><p>其中，客户端的授权模式有4种：</p>
+<ul>
+<li>授权码模式（authorization code）</li>
+<li>简化模式（implicit）</li>
+<li>密码模式（resource owner password credentials）</li>
+<li>客户端模式（client credentials）</li>
+</ul>
+<p>授权码模式是功能最完整、流程最严密的授权模式。但由于我的服务要求并不高，且在系统中客户端、认证服务器和资源服务器都是自身的服务器，对于用户来说不存在安全问题，所以采用了密码模式来实现。</p>
+<p>密码模式（Resource Owner Password Credentials Grant）中，用户向客户端提供自己的用户名和密码。客户端使用这些信息，向&quot;服务商提供商&quot;索要授权。</p>
+<p>在这种模式中，用户必须把自己的密码给客户端，但是客户端不得储存密码。这通常用在用户对客户端高度信任的情况下，比如客户端是操作系统的一部分，或者由一个著名公司出品。而认证服务器只有在其他授权模式无法执行的情况下，才能考虑使用这种模式。</p>
+<p>密码模式的流程图如下：</p>
+<pre tabindex="0"><code>Resource Owner Password Credentials Flow
+
+     +----------+
+     | Resource |
+     |  Owner   |
+     |          |
+     +----------+
+          v
+          |    Resource Owner
+         (A) Password Credentials
+          |
+          v
+     +---------+                                  +---------------+
+     |         |&gt;--(B)---- Resource Owner -------&gt;|               |
+     |         |         Password Credentials     | Authorization |
+     | Client  |                                  |     Server    |
+     |         |&lt;--(C)---- Access Token ---------&lt;|               |
+     |         |    (w/ Optional Refresh Token)   |               |
+     +---------+                                  +---------------+
+     
+    （A）用户向客户端提供用户名和密码。
+
+    （B）客户端将用户名和密码发给认证服务器，向后者请求令牌。
+
+    （C）认证服务器确认无误后，向客户端提供访问令牌。
+</code></pre><h3 id="jwt">JWT</h3>
+<p>Json web token (JWT), 是为了在网络应用环境间传递声明而执行的一种基于JSON的开放标准（<a href="https://link.jianshu.com?t=https://tools.ietf.org/html/rfc7519">(RFC 7519</a>).该token被设计为紧凑且安全的，特别适用于分布式站点的单点登录（SSO）场景。JWT的声明一般被用来在身份提供者和服务提供者间传递被认证的用户身份信息，以便于从资源服务器获取资源，也可以增加一些额外的其它业务逻辑所必须的声明信息，该 token 也可直接被用于认证，也可被加密。</p>
+<h4 id="构成">构成</h4>
+<p>JWT是由三段信息构成的，将这三段信息文本用<code>.</code>链接一起就构成了Jwt字符串。三段信息分别是：</p>
+<ul>
+<li>
+<p>第一部分，头部（header)。header 承载的信息包含：</p>
+<ul>
+<li>声明类型</li>
+<li>声明加密的算法</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;alg&#34;</span>: <span style="color:#e6db74">&#34;RS256&#34;</span>,
+  <span style="color:#f92672">&#34;typ&#34;</span>: <span style="color:#e6db74">&#34;JWT&#34;</span>
+}
+</code></pre></div><p>将 JSON 进行 <em>base64</em> 加密后得到 header。</p>
+</li>
+<li>
+<p>第二部分，载荷（payload)。payload 是存放有效信息的地方。这些有效信息包含三个部分</p>
+<ul>
+<li>
+<p>标准中注册的声明（建议但不强制使用）</p>
+<ul>
+<li>iss: jwt签发者</li>
+<li>sub: jwt所面向的用户</li>
+<li>aud: 接收jwt的一方</li>
+<li>exp: jwt的过期时间，这个过期时间必须要大于签发时间。</li>
+<li>nbf: 定义在什么时间之前，该jwt都是不可用的。</li>
+<li>iat: jwt的签发时间</li>
+<li>jti: jwt的唯一身份标识，主要用来作为一次性token，从而回避重放攻击。</li>
+</ul>
+</li>
+<li>
+<p>公共的声明。可以添加任何的信息，一般添加用户的相关信息或其他业务需要的必要信息。但不建议添加敏感信息，因为该部分在客户端可解密。</p>
+</li>
+<li>
+<p>私有的声明。是提供者和消费者所共同定义的声明，一般不建议存放敏感信息，因为base64是对称解密的，意味着该部分信息可以归类为明文信息。</p>
+</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;user_id&#34;</span>: <span style="color:#ae81ff">1</span>,
+  <span style="color:#f92672">&#34;user_name&#34;</span>: <span style="color:#e6db74">&#34;teza&#34;</span>,
+  <span style="color:#f92672">&#34;scope&#34;</span>: [
+    <span style="color:#e6db74">&#34;all&#34;</span>
+  ],
+  <span style="color:#f92672">&#34;exp&#34;</span>: <span style="color:#ae81ff">1647944576</span>,
+  <span style="color:#f92672">&#34;corp_id&#34;</span>: <span style="color:#ae81ff">1</span>,
+  <span style="color:#f92672">&#34;authorities&#34;</span>: [
+    <span style="color:#e6db74">&#34;CORP_USER&#34;</span>
+  ],
+  <span style="color:#f92672">&#34;jti&#34;</span>: <span style="color:#e6db74">&#34;d3830999-4c2b-4e5d-9c44-7423a3344caa&#34;</span>,
+  <span style="color:#f92672">&#34;client_id&#34;</span>: <span style="color:#e6db74">&#34;client-app&#34;</span>
+}
+</code></pre></div><p>将 JSON 进行 <em>base64</em> 加密后得到 payload。</p>
+</li>
+<li>
+<p>第三部分，签证（signature)。签证信息由三部分组成：</p>
+<ul>
+<li>header (base64后的)</li>
+<li>payload (base64后的)</li>
+<li>secret</li>
+</ul>
+<p>需要 <em>base64</em> 加密后的 header 和 <em>base64</em> 加密后的 payload 使用<code>.</code>连接组成的字符串，然后通过 header 中声明的加密方式进行加盐<code>secret</code>组合加密，最后构成 jwt 的第三部分。注意：secret是保存在服务器端的，jwt的签发生成也是在服务器端的，secret就是用来进行jwt的签发和jwt的验证，所以，它就是你服务端的私钥，在任何场景都不应该流露出去。一旦客户端得知这个secret，那就意味着客户端是可以自我签发jwt了。</p>
+</li>
+</ul>
+<h1 id="java-实战">Java 实战</h1>
+<p>本次项目使用 Spring Cloud 作为微服务架构，使用 Eureka 作为注册中心，Gateway 作为服务网关。示例里包含一定的业务逻辑代码，与本人在做的毕设相关，但不影响理解。</p>
+<p>服务架构如下：</p>
+<pre tabindex="0"><code>.
+├── auth-service		--port:10110
+├── eureka-server		--port:10099
+├── gateway				--port:10086
+└── api-service			--port:10001
+</code></pre><h2 id="认证服务-auth-service">认证服务 auth-service</h2>
+<h3 id="引入依赖">引入依赖</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-xml" data-lang="xml"><span style="color:#f92672">&lt;dependencies&gt;</span>
+    <span style="color:#75715e">&lt;!-- spring boot --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.boot<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-boot-starter-web<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- eureka client --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.cloud<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-cloud-starter-netflix-eureka-client<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- mysql --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>mysql<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>mysql-connector-java<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- mybatis --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.mybatis.spring.boot<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>mybatis-spring-boot-starter<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- spring cloud security security     注意:oauth2包中已包含 无需再引入 --&gt;</span>
+    <span style="color:#75715e">&lt;!--        &lt;dependency&gt;--&gt;</span>
+    <span style="color:#75715e">&lt;!--            &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;--&gt;</span>
+    <span style="color:#75715e">&lt;!--            &lt;artifactId&gt;spring-cloud-starter-security&lt;/artifactId&gt;--&gt;</span>
+    <span style="color:#75715e">&lt;!--        &lt;/dependency&gt;--&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- spring cloud security oauth2 --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.cloud<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-cloud-starter-oauth2<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- jwt --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>com.nimbusds<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>nimbus-jose-jwt<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+<span style="color:#f92672">&lt;/dependencies&gt;</span>
+</code></pre></div><h3 id="生成-rsa-证书">生成 RSA 证书</h3>
+<p>使用<code>keytool</code>生成RSA证书<code>jwt.jks</code>，复制到<code>resource</code>目录下。</p>
+<blockquote>
+<p>keytool -genkey -alias jwt -keyalg RSA -keystore jwt.jks</p>
+</blockquote>
+<h3 id="实现spring-secutity相关接口">实现Spring Secutity相关接口</h3>
+<h4 id="userdetailsservice">UserDetailsService</h4>
+<p>实现<code>UserDetailsService</code>接口，用于根据用户名（账号）加载用户信息。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#75715e">// UserDetailsServiceImpl.java
+</span><span style="color:#75715e"></span><span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">UserDetailsServiceImpl</span> <span style="color:#66d9ef">implements</span> UserDetailsService <span style="color:#f92672">{</span>
+
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> AuthUserHelper authUserHelper<span style="color:#f92672">;</span>
+
+    <span style="color:#75715e">/**
+</span><span style="color:#75715e">     * 获取用户信息
+</span><span style="color:#75715e">     *  - 密码
+</span><span style="color:#75715e">     */</span>
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> UserDetails <span style="color:#a6e22e">loadUserByUsername</span><span style="color:#f92672">(</span>String username<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> UsernameNotFoundException <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> authUserHelper<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserByAccount</span><span style="color:#f92672">(</span>username<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+
+<span style="color:#75715e">// 其中由authUserHelper提取的方法为根据username获取user信息
+</span><span style="color:#75715e">// 获取的TravelSecurityUser类为实现了UserDetails类的自定义类，包含了项目中业务上需要用的一些额外信息
+</span><span style="color:#75715e">// 如果不需要自定义内容，使用Spring Security实现好的User类即可
+</span><span style="color:#75715e">// AuthUserHelper.java
+</span><span style="color:#75715e"></span><span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AuthUserHelper</span> <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> UserDAO userDAO<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> CorpDAO corpDAO<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> PasswordEncoder passwordEncoder<span style="color:#f92672">;</span>
+
+    <span style="color:#66d9ef">public</span> UserDetails <span style="color:#a6e22e">getUserByAccount</span><span style="color:#f92672">(</span>String userAccount<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> UsernameNotFoundException <span style="color:#f92672">{</span>
+        <span style="color:#75715e">// 1. 检查账号
+</span><span style="color:#75715e"></span>        <span style="color:#75715e">// 注意这里数据库里存的密码不是明文，是已经加密过的了
+</span><span style="color:#75715e"></span>        <span style="color:#75715e">// 如果密码不是加密后的，需要使用passwordEncoder加密一下（当然还是建议不存储用户的明文密码，存在严重安全隐患）
+</span><span style="color:#75715e"></span>        UserParam userParam <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> UserParam<span style="color:#f92672">();</span>
+        userParam<span style="color:#f92672">.</span><span style="color:#a6e22e">createCriteria</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">andUserAccountEqualTo</span><span style="color:#f92672">(</span>userAccount<span style="color:#f92672">);</span>
+        List<span style="color:#f92672">&lt;</span>UserDO<span style="color:#f92672">&gt;</span> userDOS <span style="color:#f92672">=</span> userDAO<span style="color:#f92672">.</span><span style="color:#a6e22e">selectByParam</span><span style="color:#f92672">(</span>userParam<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>CollectionUtils<span style="color:#f92672">.</span><span style="color:#a6e22e">isEmpty</span><span style="color:#f92672">(</span>userDOS<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+            <span style="color:#75715e">// 用户名不存在
+</span><span style="color:#75715e"></span>            <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> UsernameNotFoundException<span style="color:#f92672">(</span>AuthMessageErrorEnum<span style="color:#f92672">.</span><span style="color:#a6e22e">USER_NOT_EXIST</span><span style="color:#f92672">.</span><span style="color:#a6e22e">getMessage</span><span style="color:#f92672">());</span>
+        <span style="color:#f92672">}</span>
+
+        <span style="color:#75715e">// 2. 校验权限
+</span><span style="color:#75715e"></span>        UserDO userDO <span style="color:#f92672">=</span> userDOS<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">(</span>0<span style="color:#f92672">);</span>
+        List<span style="color:#f92672">&lt;</span>GrantedAuthority<span style="color:#f92672">&gt;</span> authorities <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ArrayList<span style="color:#f92672">&lt;&gt;();</span>
+        <span style="color:#75715e">// 普通职工权限默认拥有
+</span><span style="color:#75715e"></span>        authorities<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>AuthorityRoleEnum<span style="color:#f92672">.</span><span style="color:#a6e22e">CORP_EMPLOYEE</span><span style="color:#f92672">.</span><span style="color:#a6e22e">getGrantedAuthority</span><span style="color:#f92672">());</span>
+
+        <span style="color:#75715e">// 校验是否是企业主管理员
+</span><span style="color:#75715e"></span>        CorpParam corpParam <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> CorpParam<span style="color:#f92672">();</span>
+        corpParam<span style="color:#f92672">.</span><span style="color:#a6e22e">createCriteria</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">andManagerUserIdEqualTo</span><span style="color:#f92672">(</span>userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserId</span><span style="color:#f92672">())</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">andCorpIdEqualToWhenPresent</span><span style="color:#f92672">(</span>userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getCorpId</span><span style="color:#f92672">());</span>
+        List<span style="color:#f92672">&lt;</span>CorpDO<span style="color:#f92672">&gt;</span> corpDOS <span style="color:#f92672">=</span> corpDAO<span style="color:#f92672">.</span><span style="color:#a6e22e">selectByParam</span><span style="color:#f92672">(</span>corpParam<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>CollectionUtils<span style="color:#f92672">.</span><span style="color:#a6e22e">isNotEmpty</span><span style="color:#f92672">(</span>corpDOS<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+            authorities<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>AuthorityRoleEnum<span style="color:#f92672">.</span><span style="color:#a6e22e">CORP_MAIN_ADMIN</span><span style="color:#f92672">.</span><span style="color:#a6e22e">getGrantedAuthority</span><span style="color:#f92672">());</span>
+        <span style="color:#f92672">}</span>
+
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> TravelSecurityUser<span style="color:#f92672">(</span>
+                userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getCorpId</span><span style="color:#f92672">(),</span> userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserId</span><span style="color:#f92672">(),</span>
+                userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserAccount</span><span style="color:#f92672">(),</span> userDO<span style="color:#f92672">.</span><span style="color:#a6e22e">getUserPassword</span><span style="color:#f92672">(),</span> authorities<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="authorizationserverconfigureradapter">AuthorizationServerConfigurerAdapter</h4>
+<p>实现<code>AuthorizationServerConfigurerAdapter</code>接口，配置认证服务相关设置，需要配置加载用户信息的服务<code>UserDetailsServiceImpl</code>及RSA的钥匙对<code>KeyPair</code>。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#75715e">// OAuth2AuthServerConfig
+</span><span style="color:#75715e"></span><span style="color:#a6e22e">@Configuration</span>
+<span style="color:#a6e22e">@EnableAuthorizationServer</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OAuth2AuthServerConfig</span> <span style="color:#66d9ef">extends</span> AuthorizationServerConfigurerAdapter <span style="color:#f92672">{</span>
+
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> PasswordEncoder passwordEncoder<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> AuthenticationManager authenticationManager<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> JwtTokenEnhancer jwtTokenEnhancer<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> UserDetailsServiceImpl userDetailsService<span style="color:#f92672">;</span>
+
+
+    <span style="color:#75715e">//配置客户端应用的相关信息
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>ClientDetailsServiceConfigurer clients<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">super</span><span style="color:#f92672">.</span><span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>clients<span style="color:#f92672">);</span>
+
+        <span style="color:#75715e">// 将客户端的信息写入内存中
+</span><span style="color:#75715e"></span>        clients<span style="color:#f92672">.</span><span style="color:#a6e22e">inMemory</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">withClient</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;client-app&#34;</span><span style="color:#f92672">)</span>                       <span style="color:#75715e">//客户端ID
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">secret</span><span style="color:#f92672">(</span>passwordEncoder<span style="color:#f92672">.</span><span style="color:#a6e22e">encode</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;123456&#34;</span><span style="color:#f92672">))</span>   	<span style="color:#75715e">//客户端密码
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">scopes</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;all&#34;</span><span style="color:#f92672">)</span>                                  <span style="color:#75715e">//用户对该客户端可以申请的权限
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">accessTokenValiditySeconds</span><span style="color:#f92672">(</span>3600<span style="color:#f92672">)</span>               <span style="color:#75715e">//令牌的有效期（单位为秒）
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">refreshTokenValiditySeconds</span><span style="color:#f92672">(</span>86400<span style="color:#f92672">)</span>             <span style="color:#75715e">// refresh token有效期
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">authorizedGrantTypes</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;password&#34;</span><span style="color:#f92672">,</span> <span style="color:#e6db74">&#34;refresh_token&#34;</span><span style="color:#f92672">);</span>     <span style="color:#75715e">//用户要访问该客户端的时候采取的授权类型，本项目采用密码模式。
+</span><span style="color:#75715e"></span>    <span style="color:#f92672">}</span>
+
+    <span style="color:#75715e">//配置令牌管理器和令牌的存储方式
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>AuthorizationServerEndpointsConfigurer endpoints<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">super</span><span style="color:#f92672">.</span><span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>endpoints<span style="color:#f92672">);</span>
+        TokenEnhancerChain enhancerChain <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> TokenEnhancerChain<span style="color:#f92672">();</span>
+        List<span style="color:#f92672">&lt;</span>TokenEnhancer<span style="color:#f92672">&gt;</span> delegates <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ArrayList<span style="color:#f92672">&lt;&gt;();</span>
+        delegates<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>jwtTokenEnhancer<span style="color:#f92672">);</span>				<span style="color:#75715e">//添加自定义信息的增强器（实现了TokenEnhancer接口）
+</span><span style="color:#75715e"></span>        delegates<span style="color:#f92672">.</span><span style="color:#a6e22e">add</span><span style="color:#f92672">(</span>accessTokenConverter<span style="color:#f92672">());</span>			<span style="color:#75715e">//jwt转换token的增强器
+</span><span style="color:#75715e"></span>        enhancerChain<span style="color:#f92672">.</span><span style="color:#a6e22e">setTokenEnhancers</span><span style="color:#f92672">(</span>delegates<span style="color:#f92672">);</span> 	<span style="color:#75715e">//配置token内容增强器
+</span><span style="color:#75715e"></span>        endpoints<span style="color:#f92672">.</span><span style="color:#a6e22e">authenticationManager</span><span style="color:#f92672">(</span>authenticationManager<span style="color:#f92672">)</span>	<span style="color:#75715e">// 由 authenticationManager 来管理
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">userDetailsService</span><span style="color:#f92672">(</span>userDetailsService<span style="color:#f92672">)</span> <span style="color:#75715e">//配置加载用户信息的服务
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">accessTokenConverter</span><span style="color:#f92672">(</span>accessTokenConverter<span style="color:#f92672">())</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">tokenEnhancer</span><span style="color:#f92672">(</span>enhancerChain<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#75715e">//配置谁能来验 token （有一些请求连验 token 的资格都没有）
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>AuthorizationServerSecurityConfigurer security<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">super</span><span style="color:#f92672">.</span><span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>security<span style="color:#f92672">);</span>
+        security<span style="color:#f92672">.</span><span style="color:#a6e22e">allowFormAuthenticationForClients</span><span style="color:#f92672">();</span>	<span style="color:#75715e">// 允许以form表单形式提交 走ClientCredentialsTokenEndpointFilter
+</span><span style="color:#75715e"></span>        												<span style="color:#75715e">// 通过body的form表单中的client_id和client_secret未加密字段来校验
+</span><span style="color:#75715e"></span>        												<span style="color:#75715e">// 如果不允许 走BasicAuthenticationFilter
+</span><span style="color:#75715e"></span>        												<span style="color:#75715e">// 一般来说通过basic auth，是通过解析在header的Authorization加上Basic+client_id+client_secret转换的加密串来校验
+</span><span style="color:#75715e"></span>        												<span style="color:#75715e">// basic auth（虽然这个加密也相当于是明文的）
+</span><span style="color:#75715e"></span>        security<span style="color:#f92672">.</span><span style="color:#a6e22e">checkTokenAccess</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;isAuthenticated()&#34;</span><span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Bean</span>
+    <span style="color:#66d9ef">public</span> JwtAccessTokenConverter <span style="color:#a6e22e">accessTokenConverter</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        JwtAccessTokenConverter jwtAccessTokenConverter <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> JwtAccessTokenConverter<span style="color:#f92672">();</span>
+        jwtAccessTokenConverter<span style="color:#f92672">.</span><span style="color:#a6e22e">setKeyPair</span><span style="color:#f92672">(</span>keyPair<span style="color:#f92672">());</span>
+        <span style="color:#66d9ef">return</span> jwtAccessTokenConverter<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Bean</span>
+    <span style="color:#66d9ef">public</span> KeyPair <span style="color:#a6e22e">keyPair</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#75715e">//从classpath下的证书中获取秘钥对
+</span><span style="color:#75715e"></span>        KeyStoreKeyFactory keyStoreKeyFactory <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> KeyStoreKeyFactory<span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> ClassPathResource<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;jwt.jks&#34;</span><span style="color:#f92672">),</span> <span style="color:#e6db74">&#34;W.w215.+&#34;</span><span style="color:#f92672">.</span><span style="color:#a6e22e">toCharArray</span><span style="color:#f92672">());</span>
+        <span style="color:#66d9ef">return</span> keyStoreKeyFactory<span style="color:#f92672">.</span><span style="color:#a6e22e">getKeyPair</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;jwt&#34;</span><span style="color:#f92672">,</span> <span style="color:#e6db74">&#34;生成rsa证书时的密码&#34;</span><span style="color:#f92672">.</span><span style="color:#a6e22e">toCharArray</span><span style="color:#f92672">());</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="暴露公钥">暴露公钥</h4>
+<p>由于我们的网关服务需要RSA的公钥来验证签名是否合法，所以认证服务需要有个接口把公钥暴露出来。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@RestController</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">KeyPairController</span> <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> KeyPair keyPair<span style="color:#f92672">;</span>
+
+    <span style="color:#a6e22e">@GetMapping</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;/rsa/publicKey&#34;</span><span style="color:#f92672">)</span>
+    <span style="color:#66d9ef">public</span> Map<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">,</span> Object<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">getKey</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        RSAPublicKey publicKey <span style="color:#f92672">=</span> <span style="color:#f92672">(</span>RSAPublicKey<span style="color:#f92672">)</span> keyPair<span style="color:#f92672">.</span><span style="color:#a6e22e">getPublic</span><span style="color:#f92672">();</span>
+        RSAKey key <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> RSAKey<span style="color:#f92672">.</span><span style="color:#a6e22e">Builder</span><span style="color:#f92672">(</span>publicKey<span style="color:#f92672">).</span><span style="color:#a6e22e">build</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> JWKSet<span style="color:#f92672">(</span>key<span style="color:#f92672">).</span><span style="color:#a6e22e">toJSONObject</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="oauth2websecurityconfig">OAuth2WebSecurityConfig</h4>
+<p>配置 Spring Security，允许访问公钥接口。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@Configuration</span>
+<span style="color:#a6e22e">@EnableWebSecurity</span>  <span style="color:#75715e">//支持 WebSecurity
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OAuth2WebSecurityConfig</span> <span style="color:#66d9ef">extends</span> WebSecurityConfigurerAdapter <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> UserDetailsService userDetailsService<span style="color:#f92672">;</span>
+
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> PasswordEncoder passwordEncoder<span style="color:#f92672">;</span>
+
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">protected</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>HttpSecurity http<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        http<span style="color:#f92672">.</span><span style="color:#a6e22e">authorizeRequests</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">requestMatchers</span><span style="color:#f92672">(</span>EndpointRequest<span style="color:#f92672">.</span><span style="color:#a6e22e">toAnyEndpoint</span><span style="color:#f92672">()).</span><span style="color:#a6e22e">permitAll</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">antMatchers</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;/rsa/publicKey&#34;</span><span style="color:#f92672">).</span><span style="color:#a6e22e">permitAll</span><span style="color:#f92672">()</span>		<span style="color:#75715e">// 允许访问公钥接口
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">anyRequest</span><span style="color:#f92672">().</span><span style="color:#a6e22e">authenticated</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#75715e">//配置如何构建 AuthenticationManager
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">protected</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">configure</span><span style="color:#f92672">(</span>AuthenticationManagerBuilder auth<span style="color:#f92672">)</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        auth
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">userDetailsService</span><span style="color:#f92672">(</span>userDetailsService<span style="color:#f92672">)</span>		<span style="color:#75715e">//获取用户详细信息（用户名、权限等）
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">passwordEncoder</span><span style="color:#f92672">(</span>passwordEncoder<span style="color:#f92672">);</span>			<span style="color:#75715e">//密码加密器
+</span><span style="color:#75715e"></span>    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Bean</span>
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> AuthenticationManager <span style="color:#a6e22e">authenticationManagerBean</span><span style="color:#f92672">()</span> <span style="color:#66d9ef">throws</span> Exception <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">super</span><span style="color:#f92672">.</span><span style="color:#a6e22e">authenticationManagerBean</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="验证">验证</h3>
+<p>这里使用 Postman 进行测试，选择 Auth Type 为 Basic Auth（或者直接在body的form中写入<code>client_id</code>和<code>client_secret</code>字段），写上 username 和 password（也就是 <em>OAuth2AuthServerConfig</em> 里设置的在内存中的 <code>client_id</code>和<code>secret</code>）。</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220329/20220329160131.png" alt="image-20220329160130938"></p>
+<p>再设置好登陆的用户名和密码，以及 <em>OAuth2AuthServerConfig</em> 里配置好允许的认证类型（password）和请求的权限（all）。</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220329/20220329160227.png" alt="image-20220329160227160"></p>
+<p>可以看到服务端响应的请求如下：</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+    <span style="color:#f92672">&#34;access_token&#34;</span>: <span style="color:#e6db74">&#34;eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VyX25hbWUiOiJheWFuIiwic2NvcGUiOlsiYWxsIl0sImV4cCI6MTY0ODU0NDUwOCwiY29ycF9pZCI6MiwiYXV0aG9yaXRpZXMiOlsiQ09SUF9VU0VSIl0sImp0aSI6ImM0NDRiNzU3LTdhZmMtNGQ5OC1hNzEzLWJlYTkyYmQ1ZjVkNyIsImNsaWVudF9pZCI6ImNsaWVudC1hcHAifQ.ZIeEzyk25ix5SL1lMXQhe6jC76y2t3NND-mpwl9QTLvpPYkO6jdpsDikTOh75E-UhJvSTaxS3jB3JrBt3tL50IjXrxDhNvpGlvIpF-cEL6mxSXZhF3ZOOfj1BHJHOVk3ppNVNqJkt4s_4kjg_a8U1uZlHg7-5eub7RFIuAW01R4u1oxZ3EtftTmdGqHw3PiL0OpNUH9q-Y-DT56vTPGeNdBTMS1CoJQRev5FX8jhOXFJfFsmTwVa7U_Cy_glKNRftUNX6trDzOARwG0JI23BMB2iCe8K6DKQXxOIlo57tMAkZBIPVrDwmnuElPYfmagcUp-0ejzmMD2mqH-CKX6vmg&#34;</span>,
+    <span style="color:#f92672">&#34;token_type&#34;</span>: <span style="color:#e6db74">&#34;bearer&#34;</span>,
+    <span style="color:#f92672">&#34;refresh_token&#34;</span>: <span style="color:#e6db74">&#34;eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VyX25hbWUiOiJheWFuIiwic2NvcGUiOlsiYWxsIl0sImF0aSI6ImM0NDRiNzU3LTdhZmMtNGQ5OC1hNzEzLWJlYTkyYmQ1ZjVkNyIsImV4cCI6MTY0ODYyNzMwOCwiY29ycF9pZCI6MiwiYXV0aG9yaXRpZXMiOlsiQ09SUF9VU0VSIl0sImp0aSI6IjVmYjVmNjRiLTU0YTEtNDk2Zi1hOTU3LWVmODY5Y2I1M2YyMiIsImNsaWVudF9pZCI6ImNsaWVudC1hcHAifQ.ippaehx2sKwqg2dvbjOELd_ab8pM-X8fki7DpvTsAoAHtAFBdsdm2r3A_lNbOCl9ZxwetzC6UFQA5tg0np8Y0cdwHkX_CuB2ldlPg_ro27cnPxEQJZ_eap8auWKxbT-IOA6-iaYW5Q0VPNCtNJdnAeeK6kXxTzctD82Dk_wJ3SBhBh7W6hwsoYQGmuqd89f_CiEgkLumXO2uQa3paC9v8eQEoiqRebRb7s1Mx3ZkzCWCkAto108Y7KEb40x4GT6HNQtuth30T9AcLSgHqO2--sYq14vL3A0YsO8Tx823C6T1Rp_-462OB0GF2HsIJiQpHidReB75TvDmAhiV4xB__Q&#34;</span>,
+    <span style="color:#f92672">&#34;expires_in&#34;</span>: <span style="color:#ae81ff">3599</span>,
+    <span style="color:#f92672">&#34;scope&#34;</span>: <span style="color:#e6db74">&#34;all&#34;</span>,
+    <span style="color:#f92672">&#34;user_id&#34;</span>: <span style="color:#ae81ff">2</span>,
+    <span style="color:#f92672">&#34;corp_id&#34;</span>: <span style="color:#ae81ff">2</span>,
+    <span style="color:#f92672">&#34;jti&#34;</span>: <span style="color:#e6db74">&#34;c444b757-7afc-4d98-a713-bea92bd5f5d7&#34;</span>
+}
+</code></pre></div><p>到 jwt 官网 <a href="https://jwt.io/">jwt - debugger</a> 使用 debugger 工具对<code>access_token</code>进行验证：</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220329/20220329161837.png" alt="jwt.io"></p>
+<p>可以看到 jwt.payload 区已经携带了 <code>user_name</code>、<code>scope</code>、<code>authorities</code>、<code>client_id</code>以及 token 有效时间等信息（这里的<code>user_id</code>和<code>corp_id</code>是我在 <em>JwtTokenEnhancer</em> 内容增强器里补充的 claim）。另外下面也可以用公钥去验证签名。</p>
+<h2 id="网关-gateway">网关 gateway</h2>
+<h3 id="引入依赖-1">引入依赖</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-xml" data-lang="xml"><span style="color:#f92672">&lt;dependencies&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.cloud<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-cloud-starter-gateway<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.boot<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-boot-starter-webflux<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.security<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-security-config<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.security<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-security-oauth2-resource-server<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.security<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-security-oauth2-client<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.security<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-security-oauth2-jose<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>com.nimbusds<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>nimbus-jose-jwt<span style="color:#f92672">&lt;/artifactId&gt;</span>
+        <span style="color:#f92672">&lt;version&gt;</span>8.16<span style="color:#f92672">&lt;/version&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- eureka client --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.cloud<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-cloud-starter-netflix-eureka-client<span style="color:#f92672">&lt;/artifactId&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+
+    <span style="color:#75715e">&lt;!-- 自定义元数据 --&gt;</span>
+    <span style="color:#f92672">&lt;dependency&gt;</span>
+        <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.boot<span style="color:#f92672">&lt;/groupId&gt;</span>
+        <span style="color:#f92672">&lt;artifactId&gt;</span>spring-boot-configuration-processor<span style="color:#f92672">&lt;/artifactId&gt;</span>
+        <span style="color:#f92672">&lt;optional&gt;</span>true<span style="color:#f92672">&lt;/optional&gt;</span>
+    <span style="color:#f92672">&lt;/dependency&gt;</span>
+<span style="color:#f92672">&lt;/dependencies&gt;</span>
+</code></pre></div><h3 id="配置应用信息">配置应用信息</h3>
+<p>在<code>application.yml</code>中添加相关配置，主要是路由规则的配置、Oauth2中RSA公钥的配置及路由白名单的配置。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-xml" data-lang="xml">server:
+  port: 10086 # 网关端口
+
+spring:
+  application:
+    name: gateway # 服务名称
+  cloud:
+    gateway:
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          &#39;[/**]&#39;:
+            allowedOrigins: &#34;*&#34; # 允许哪些网站的跨域请求 allowedOrigins: “*” 允许所有网站
+            allowedMethods: # 允许的跨域请求方式
+              - &#34;GET&#34;
+              - &#34;POST&#34;
+              - &#34;DELETE&#34;
+              - &#34;PUT&#34;
+              - &#34;OPTIONS&#34;
+            allowedHeaders: &#34;*&#34; # 允许在请求中携带的头信息
+            allowCredentials: true # 是否允许携带cookie
+            maxAge: 360000 # 这次跨域检测的有效期
+      routes: # 网关路由配置
+        - id: api-service        # 路由id，自定义，只要唯一即可
+          uri: lb://api-service  # 路由的目标地址 lb就是负载均衡，后面跟服务名称
+          predicates:            # 路由断言，也就是判断请求是否符合路由规则的条件
+            - Path=/api/**       # 按照路径匹配，只要以/api/开头就符合要求
+
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**         # 按照路径匹配，只要以/auth/开头就符合要求
+          filters:
+            - StripPrefix=1         # 在将请求发送到下游之前从请求中剥离的路径个数
+      discovery:
+        locator:
+          enabled: true             # 开启从注册中心动态创建路由的功能
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: &#39;http://localhost:10110/rsa/publicKey&#39; #配置RSA的公钥访问地址
+
+# eureka 配置
+eureka:
+  client:
+    service-url:
+      defaultZone: http://127.0.0.1:10099/eureka
+
+# 自定义配置
+secure:
+  ignore:
+    urls: #配置白名单路径
+      - &#34;/actuator/**&#34;
+      - &#34;/auth/oauth/token&#34;
+</code></pre></div><h3 id="安全配置">安全配置</h3>
+<h4 id="resourceserverconfig">ResourceServerConfig</h4>
+<p>对网关服务进行配置安全配置，由于Gateway使用的是<code>WebFlux</code>，所以需要使用<code>@EnableWebFluxSecurity</code>注解开启。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#75715e">/**
+</span><span style="color:#75715e"> * 资源服务器配置
+</span><span style="color:#75715e"> *
+</span><span style="color:#75715e"> * @author github @TezaLeMon
+</span><span style="color:#75715e"> * @date 2022/3/21
+</span><span style="color:#75715e"> */</span>
+<span style="color:#a6e22e">@EnableWebFluxSecurity</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResourceServerConfig</span> <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> IgnoreUrlsConfig ignoreUrlsConfig<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> RestfulAccessDeniedHandler restfulAccessDeniedHandler<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> RestAuthenticationEntryPoint restAuthenticationEntryPoint<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> AuthorizationManager authorizationManager<span style="color:#f92672">;</span>
+    <span style="color:#a6e22e">@Autowired</span>
+    <span style="color:#66d9ef">private</span> IgnoreUrlsRemoveJwtFilter ignoreUrlsRemoveJwtFilter<span style="color:#f92672">;</span>
+
+    <span style="color:#a6e22e">@Bean</span>
+    <span style="color:#66d9ef">public</span> SecurityWebFilterChain <span style="color:#a6e22e">springSecurityFilterChain</span><span style="color:#f92672">(</span>ServerHttpSecurity http<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        http<span style="color:#f92672">.</span><span style="color:#a6e22e">oauth2ResourceServer</span><span style="color:#f92672">().</span><span style="color:#a6e22e">jwt</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">jwtAuthenticationConverter</span><span style="color:#f92672">(</span>jwtAuthenticationConverter<span style="color:#f92672">());</span>
+        <span style="color:#75715e">//自定义处理JWT请求头过期或签名错误的结果
+</span><span style="color:#75715e"></span>        http<span style="color:#f92672">.</span><span style="color:#a6e22e">oauth2ResourceServer</span><span style="color:#f92672">().</span><span style="color:#a6e22e">authenticationEntryPoint</span><span style="color:#f92672">(</span>restAuthenticationEntryPoint<span style="color:#f92672">);</span>
+        <span style="color:#75715e">//对白名单路径，直接移除JWT请求头
+</span><span style="color:#75715e"></span>        http<span style="color:#f92672">.</span><span style="color:#a6e22e">addFilterBefore</span><span style="color:#f92672">(</span>ignoreUrlsRemoveJwtFilter<span style="color:#f92672">,</span> SecurityWebFiltersOrder<span style="color:#f92672">.</span><span style="color:#a6e22e">AUTHENTICATION</span><span style="color:#f92672">);</span>
+        http<span style="color:#f92672">.</span><span style="color:#a6e22e">authorizeExchange</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">pathMatchers</span><span style="color:#f92672">(</span>HttpMethod<span style="color:#f92672">.</span><span style="color:#a6e22e">OPTIONS</span><span style="color:#f92672">).</span><span style="color:#a6e22e">permitAll</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">pathMatchers</span><span style="color:#f92672">(</span>ignoreUrlsConfig<span style="color:#f92672">.</span><span style="color:#a6e22e">getUrls</span><span style="color:#f92672">().</span><span style="color:#a6e22e">toArray</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> String<span style="color:#f92672">[]{})).</span><span style="color:#a6e22e">permitAll</span><span style="color:#f92672">()</span>   <span style="color:#75715e">//放行白名单配置
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">anyExchange</span><span style="color:#f92672">().</span><span style="color:#a6e22e">access</span><span style="color:#f92672">(</span>authorizationManager<span style="color:#f92672">)</span>     <span style="color:#75715e">//鉴权管理器
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">and</span><span style="color:#f92672">().</span><span style="color:#a6e22e">exceptionHandling</span><span style="color:#f92672">()</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">accessDeniedHandler</span><span style="color:#f92672">(</span>restfulAccessDeniedHandler<span style="color:#f92672">)</span>            <span style="color:#75715e">//处理未授权
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">authenticationEntryPoint</span><span style="color:#f92672">(</span>restAuthenticationEntryPoint<span style="color:#f92672">)</span>     <span style="color:#75715e">//处理未认证
+</span><span style="color:#75715e"></span>                <span style="color:#f92672">.</span><span style="color:#a6e22e">and</span><span style="color:#f92672">().</span><span style="color:#a6e22e">csrf</span><span style="color:#f92672">().</span><span style="color:#a6e22e">disable</span><span style="color:#f92672">();</span>
+        <span style="color:#66d9ef">return</span> http<span style="color:#f92672">.</span><span style="color:#a6e22e">build</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Bean</span>
+    <span style="color:#66d9ef">public</span> Converter<span style="color:#f92672">&lt;</span>Jwt<span style="color:#f92672">,</span> <span style="color:#f92672">?</span> <span style="color:#66d9ef">extends</span> Mono<span style="color:#f92672">&lt;?</span> <span style="color:#66d9ef">extends</span> AbstractAuthenticationToken<span style="color:#f92672">&gt;&gt;</span> <span style="color:#a6e22e">jwtAuthenticationConverter</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> JwtGrantedAuthoritiesConverter<span style="color:#f92672">();</span>
+        jwtGrantedAuthoritiesConverter<span style="color:#f92672">.</span><span style="color:#a6e22e">setAuthorityPrefix</span><span style="color:#f92672">(</span>AuthConstant<span style="color:#f92672">.</span><span style="color:#a6e22e">AUTHORITY_PREFIX</span><span style="color:#f92672">);</span>
+        jwtGrantedAuthoritiesConverter<span style="color:#f92672">.</span><span style="color:#a6e22e">setAuthoritiesClaimName</span><span style="color:#f92672">(</span>AuthConstant<span style="color:#f92672">.</span><span style="color:#a6e22e">AUTHORITY_CLAIM_NAME</span><span style="color:#f92672">);</span>
+        JwtAuthenticationConverter jwtAuthenticationConverter <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> JwtAuthenticationConverter<span style="color:#f92672">();</span>
+        jwtAuthenticationConverter<span style="color:#f92672">.</span><span style="color:#a6e22e">setJwtGrantedAuthoritiesConverter</span><span style="color:#f92672">(</span>jwtGrantedAuthoritiesConverter<span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> ReactiveJwtAuthenticationConverterAdapter<span style="color:#f92672">(</span>jwtAuthenticationConverter<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="authorizationmanager-自定义鉴权管理器">AuthorizationManager 自定义鉴权管理器</h4>
+<p>在认证服务器我已经默认至少给用户<code>CORP_EMPLOYEE</code>角色，所以这里鉴权时相当于只要是认证用户就会放行（其实已经属于多余操作了），如果自己有相关的需求可以在此基础上修改（比如设置某些 api 只能被特定的角色访问）。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#75715e">/**
+</span><span style="color:#75715e"> * 鉴权管理器，用于判断是否有资源的访问权限
+</span><span style="color:#75715e"> *
+</span><span style="color:#75715e"> * @author github @TezaLeMon
+</span><span style="color:#75715e"> * @date 2022/3/22
+</span><span style="color:#75715e"> */</span>
+<span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AuthorizationManager</span> <span style="color:#66d9ef">implements</span> ReactiveAuthorizationManager<span style="color:#f92672">&lt;</span>AuthorizationContext<span style="color:#f92672">&gt;</span> <span style="color:#f92672">{</span>
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> Mono<span style="color:#f92672">&lt;</span>AuthorizationDecision<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">check</span><span style="color:#f92672">(</span>Mono<span style="color:#f92672">&lt;</span>Authentication<span style="color:#f92672">&gt;</span> mono<span style="color:#f92672">,</span> AuthorizationContext authorizationContext<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        <span style="color:#75715e">// 获取当前路径可访问角色列表 todo 目前配置为网关层允许所有role通过，在应用层进行权限校验
+</span><span style="color:#75715e">//        URI uri = authorizationContext.getExchange().getRequest().getURI();
+</span><span style="color:#75715e"></span>        List<span style="color:#f92672">&lt;</span>String<span style="color:#f92672">&gt;</span> authorities <span style="color:#f92672">=</span> Arrays<span style="color:#f92672">.</span><span style="color:#a6e22e">stream</span><span style="color:#f92672">(</span>AuthorityRoleEnum<span style="color:#f92672">.</span><span style="color:#a6e22e">values</span><span style="color:#f92672">()).</span><span style="color:#a6e22e">map</span><span style="color:#f92672">(</span>a <span style="color:#f92672">-&gt;</span> AuthConstant<span style="color:#f92672">.</span><span style="color:#a6e22e">AUTHORITY_PREFIX</span> <span style="color:#f92672">+</span> a<span style="color:#f92672">.</span><span style="color:#a6e22e">getRoleCode</span><span style="color:#f92672">()).</span><span style="color:#a6e22e">collect</span><span style="color:#f92672">(</span>Collectors<span style="color:#f92672">.</span><span style="color:#a6e22e">toList</span><span style="color:#f92672">());</span>
+        <span style="color:#75715e">//认证通过且角色匹配的用户可访问当前路径
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">return</span> mono
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">filter</span><span style="color:#f92672">(</span>Authentication<span style="color:#f92672">::</span>isAuthenticated<span style="color:#f92672">)</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">flatMapIterable</span><span style="color:#f92672">(</span>Authentication<span style="color:#f92672">::</span>getAuthorities<span style="color:#f92672">)</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">map</span><span style="color:#f92672">(</span>GrantedAuthority<span style="color:#f92672">::</span>getAuthority<span style="color:#f92672">)</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">any</span><span style="color:#f92672">(</span>authorities<span style="color:#f92672">::</span>contains<span style="color:#f92672">)</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">map</span><span style="color:#f92672">(</span>AuthorizationDecision<span style="color:#f92672">::</span><span style="color:#66d9ef">new</span><span style="color:#f92672">)</span>
+                <span style="color:#f92672">.</span><span style="color:#a6e22e">defaultIfEmpty</span><span style="color:#f92672">(</span><span style="color:#66d9ef">new</span> AuthorizationDecision<span style="color:#f92672">(</span><span style="color:#66d9ef">false</span><span style="color:#f92672">));</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="authglobalfilter-全局过滤器">AuthGlobalFilter 全局过滤器</h4>
+<p>这个过滤器不是必须的，主要是用于在鉴权通过后将 JWT 令牌中的用户信息解析出来，然后存入请求的Header中，这样后续服务就不需要解析JWT令牌了，可以直接从请求的Header中获取到用户信息。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@Slf4j</span>
+<span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AuthGlobalFilter</span> <span style="color:#66d9ef">implements</span> GlobalFilter<span style="color:#f92672">,</span> Ordered <span style="color:#f92672">{</span>
+
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> Mono<span style="color:#f92672">&lt;</span>Void<span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">filter</span><span style="color:#f92672">(</span>ServerWebExchange exchange<span style="color:#f92672">,</span> GatewayFilterChain chain<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        String token <span style="color:#f92672">=</span> exchange<span style="color:#f92672">.</span><span style="color:#a6e22e">getRequest</span><span style="color:#f92672">().</span><span style="color:#a6e22e">getHeaders</span><span style="color:#f92672">().</span><span style="color:#a6e22e">getFirst</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Authorization&#34;</span><span style="color:#f92672">);</span>
+        <span style="color:#66d9ef">if</span> <span style="color:#f92672">(</span>StringUtils<span style="color:#f92672">.</span><span style="color:#a6e22e">isBlank</span><span style="color:#f92672">(</span>token<span style="color:#f92672">))</span> <span style="color:#f92672">{</span>
+            <span style="color:#66d9ef">return</span> chain<span style="color:#f92672">.</span><span style="color:#a6e22e">filter</span><span style="color:#f92672">(</span>exchange<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">try</span> <span style="color:#f92672">{</span>
+            <span style="color:#75715e">//从token中解析用户信息并设置到Header中去
+</span><span style="color:#75715e"></span>            String realToken <span style="color:#f92672">=</span> token<span style="color:#f92672">.</span><span style="color:#a6e22e">replace</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Bearer &#34;</span><span style="color:#f92672">,</span> <span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">);</span>
+            JWSObject jwsObject <span style="color:#f92672">=</span> JWSObject<span style="color:#f92672">.</span><span style="color:#a6e22e">parse</span><span style="color:#f92672">(</span>realToken<span style="color:#f92672">);</span>
+            String userStr <span style="color:#f92672">=</span> jwsObject<span style="color:#f92672">.</span><span style="color:#a6e22e">getPayload</span><span style="color:#f92672">().</span><span style="color:#a6e22e">toString</span><span style="color:#f92672">();</span>
+            log<span style="color:#f92672">.</span><span style="color:#a6e22e">info</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;ltd.teza.gateway.filter.AuthGlobalFilter.filter() user:{}&#34;</span><span style="color:#f92672">,</span> userStr<span style="color:#f92672">);</span>
+            ServerHttpRequest request <span style="color:#f92672">=</span> exchange<span style="color:#f92672">.</span><span style="color:#a6e22e">getRequest</span><span style="color:#f92672">().</span><span style="color:#a6e22e">mutate</span><span style="color:#f92672">().</span><span style="color:#a6e22e">header</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;user&#34;</span><span style="color:#f92672">,</span> userStr<span style="color:#f92672">).</span><span style="color:#a6e22e">build</span><span style="color:#f92672">();</span>
+            exchange <span style="color:#f92672">=</span> exchange<span style="color:#f92672">.</span><span style="color:#a6e22e">mutate</span><span style="color:#f92672">().</span><span style="color:#a6e22e">request</span><span style="color:#f92672">(</span>request<span style="color:#f92672">).</span><span style="color:#a6e22e">build</span><span style="color:#f92672">();</span>
+        <span style="color:#f92672">}</span> <span style="color:#66d9ef">catch</span> <span style="color:#f92672">(</span>ParseException e<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+            log<span style="color:#f92672">.</span><span style="color:#a6e22e">error</span><span style="color:#f92672">(</span><span style="color:#e6db74">&#34;ltd.teza.gateway.filter.AuthGlobalFilter JWSObject.parse exception&#34;</span><span style="color:#f92672">,</span> e<span style="color:#f92672">);</span>
+        <span style="color:#f92672">}</span>
+        <span style="color:#66d9ef">return</span> chain<span style="color:#f92672">.</span><span style="color:#a6e22e">filter</span><span style="color:#f92672">(</span>exchange<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#a6e22e">@Override</span>
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">int</span> <span style="color:#a6e22e">getOrder</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> 0<span style="color:#f92672">;</span>
+    <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h3 id="验证-1">验证</h3>
+<p>这里将地址改为网关的地址，并且加上前缀 /auth（别忘了在设置路由时设置了以/auth开头的请求转发到认证服务器，并且在转发前剥离一段路径）。可以看到我们的请求成功由网关转发到认证服务器了。</p>
+<p><img src="https://raw.githubusercontent.com/TezaLeMon/PicGoRepo/main/img/20220329/20220329201052.png" alt="image-20220329201052080"></p>
+<h2 id="应用层服务-api-service">应用层服务 api-service</h2>
+<h3 id="引入依赖-2">引入依赖</h3>
+<p>应用层不做鉴权，写正常的api接口即可。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-xml" data-lang="xml"><span style="color:#f92672">&lt;dependency&gt;</span>
+    <span style="color:#f92672">&lt;groupId&gt;</span>org.springframework.boot<span style="color:#f92672">&lt;/groupId&gt;</span>
+    <span style="color:#f92672">&lt;artifactId&gt;</span>spring-boot-starter-web<span style="color:#f92672">&lt;/artifactId&gt;</span>
+<span style="color:#f92672">&lt;/dependency&gt;</span>
+</code></pre></div><h3 id="获取鉴权后网关层写到header的信息">获取鉴权后网关层写到header的信息</h3>
+<h4 id="usersession">UserSession</h4>
+<p>用于存储携带过来的信息。</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-java" data-lang="java"><span style="color:#a6e22e">@Component</span>
+<span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">UserSession</span> <span style="color:#f92672">{</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">final</span> ThreadLocal<span style="color:#f92672">&lt;</span>Long<span style="color:#f92672">&gt;</span> corpId <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ThreadLocal<span style="color:#f92672">&lt;&gt;();</span>
+    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">final</span> ThreadLocal<span style="color:#f92672">&lt;</span>Long<span style="color:#f92672">&gt;</span> userId <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> ThreadLocal<span style="color:#f92672">&lt;&gt;();</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setUser</span><span style="color:#f92672">(</span>Long corpId<span style="color:#f92672">,</span> Long userId<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+        UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">corpId</span><span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>corpId<span style="color:#f92672">);</span>
+        UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">userId</span><span style="color:#f92672">.</span><span style="color:#a6e22e">set</span><span style="color:#f92672">(</span>userId<span style="color:#f92672">);</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">clear</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">corpId</span><span style="color:#f92672">.</span><span style="color:#a6e22e">remove</span><span style="color:#f92672">();</span>
+        UserSession<span style="color:#f92672">.</span><span style="color:#a6e22e">userId</span><span style="color:#f92672">.</span><span style="color:#a6e22e">remove</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> Long <span style="color:#a6e22e">getCorpId</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> corpId<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+
+    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> Long <span style="color:#a6e22e">getUserId</span><span style="color:#f92672">()</span> <span style="color:#f92672">{</span>
+        <span style="color:#66d9ef">return</span> userId<span style="color:#f92672">.</span><span style="color:#a6e22e">get</span><span style="color:#f92672">();</span>
+    <span style="color:#f92672">}</span>
+
+<span style="color:#f92672">}</span>
+</code></pre></div><h4 id="authfilter">AuthFilter</h4>
+<p>使用 filter 将 header 中的信息提取出来。</p>
+<p>主要流程：当请求到达时</p>
+<pre tabindex="0"><code class="language-mermaid" data-lang="mermaid">graph TD;
+    A--&gt;B;
+    A--&gt;C;
+    B--&gt;D;
+</code></pre><p>参考资料：</p>
+<p><a href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749</a></p>
+<p><a href="http://www.ruanyifeng.com/blog/2014/05/oauth_2_0.html">理解OAuth 2.0</a></p>
+<p><a href="https://www.jianshu.com/p/576dbf44b2ae">什么是 JWT &ndash; JSON WEB TOKEN</a></p>
+<p><a href="https://link.jianshu.com?t=https://tools.ietf.org/html/rfc7519">RFC 7519</a></p>
+<p><a href="https://jwt.io/">jwt.io</a><a href="https://juejin.cn/post/6850037263707930631#heading-6">微服务权限终极解决方案，Spring Cloud Gateway + Oauth2 实现统一认证和鉴权！</a></p>
+
+</div>
+
+
+  </main>
+
+  
+  
+  
+  
+<script src="https://cdn.bootcdn.net/ajax/libs/mermaid/8.14.0/mermaid.min.js"></script>
+<script>
+    
+    Array.from(document.getElementsByClassName("language-mermaid")).forEach(
+        (el) => {
+            el.parentElement.outerHTML = `<div class="mermaid">${el.innerText}</div>`;
+        }
+    );
+    mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+
+</html>
