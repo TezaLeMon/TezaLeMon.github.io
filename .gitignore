@@ -1,0 +1,6 @@
+.vs/
+
+hugo.exe
+
+.DS_Store
+.hugo_build.lock
